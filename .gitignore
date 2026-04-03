@@ -1,0 +1,32 @@
+# Xcode
+DerivedData/
+build/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# User settings
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.app
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# CocoaPods (if added later)
+Pods/
+
+# Fastlane (if added later)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
