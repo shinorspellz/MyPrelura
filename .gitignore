@@ -33,3 +33,6 @@ fastlane/test_output
 
 # Local secrets (use Secrets.plist.example)
 Secrets.plist
+
+# App Store Connect upload (see scripts/testflight-credentials.json.example)
+scripts/testflight-credentials.json
