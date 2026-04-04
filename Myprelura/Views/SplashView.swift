@@ -1,6 +1,13 @@
+//
+//  SplashView.swift
+//  Prelura-swift
+//
+//  Splash: black background, PRELURA SVG logo only (primary colour); soft in/out animation; "by Voltis Labs" at bottom.
+//
+
 import SwiftUI
 
-/// Same treatment as `PreluraSwift.SplashView`: black background, `SplashLogo` template in primary colour, Voltis footer.
+/// Splash screen: black background with centered PRELURA SVG logo (primary colour); no glass container.
 struct SplashView: View {
     var onFinish: () -> Void
 
@@ -27,7 +34,7 @@ struct SplashView: View {
                 Image("SplashLogo")
                     .resizable()
                     .renderingMode(.template)
-                    .foregroundStyle(Theme.primaryColor)
+                    .foregroundColor(Theme.primaryColor)
                     .scaledToFit()
                     .frame(maxWidth: 280)
                     .scaleEffect(phase == .hidden ? 0.92 : (phase == .exiting ? 1.04 : 1.0))
@@ -35,14 +42,16 @@ struct SplashView: View {
                 Spacer()
                 Text("by Voltis Labs")
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundColor(.white.opacity(0.7))
                     .opacity(footerVisible ? 1 : 0)
                     .scaleEffect(footerVisible ? 1 : 0.92)
                     .padding(.bottom, 32)
             }
         }
         .ignoresSafeArea()
-        .onAppear { startAnimation() }
+        .onAppear {
+            startAnimation()
+        }
     }
 
     private func startAnimation() {
@@ -65,4 +74,8 @@ struct SplashView: View {
             onFinish()
         }
     }
+}
+
+#Preview {
+    SplashView(onFinish: {})
 }

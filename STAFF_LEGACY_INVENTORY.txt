@@ -1,0 +1,30 @@
+Myprelura staff app — archived reference (pre–Prelura-clone baseline)
+=====================================================================
+
+Full Swift source snapshot: ../MypreluraStaffLegacy/Source/
+(Everything that lived in Myprelura/Myprelura/ before the clone.)
+
+Re-integration checklist (next phase)
+-----------------------------------
+1. Admin shell: MypreluraApp, RootView, AdminRootShellView, AdminSession, LoginView, SplashView
+2. Navigation: MainTabView, AdminDesktopShell, AdminLayout, AdminNavigationChrome, Theme (staff chrome)
+3. Staff GraphQL: GraphQLClient.swift (merged client), PreluraAdminAPI.swift, Models/AdminDTOs.swift
+4. Tabs / screens:
+   - DashboardView
+   - UserManagementView, UserDetailView (was ConsumerUserProfileScreen + consumer port)
+   - ListingsModerationView, ListingFlagSheet
+   - ReportsQueueView, AdminReportDetailView
+   - TransactionsView
+   - BannersAnnouncementsView
+   - SettingsHubView → rename/replace consumer Settings with “Admin settings”
+   - More: ConsoleView, AnalyticsDetailView, MessagesRootView, AdminToolsMenuSheet
+5. Components: GlassCard (staff), AdminAvatar, AdminShimmer, ConsumerWebPageView / AdminWebViewRepresentable
+6. Utilities: MediaURL, HapticManager extensions (secondaryAction, like)
+7. Constants: prefilled staff login, graphQLBaseURL, graphQLUploadURL, publicWeb URLs
+8. Consumer port folder Consumer/ (UserProfileView, services, models, multibuy placeholder, etc.) — may be redundant once base app IS consumer; cherry-pick only staff-specific bridges (e.g. StaffConsumerAuthService) if still needed
+
+Product identity (this repo after clone)
+----------------------------------------
+- Target: Myprelura
+- Bundle ID: com.myprelura.preloved
+- Base codebase: PreluraSwift (consumer) — @main remains Prelura_swiftApp until you swap entry point for staff gate.

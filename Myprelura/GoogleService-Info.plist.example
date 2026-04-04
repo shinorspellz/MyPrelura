@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Copy to GoogleService-Info.plist from Firebase Console (Project settings → Your apps → iOS).
+
+  Bundle ID MUST match Xcode: com.prelura.preloved
+
+  For server-sent pushes (offers, messages): use the SAME Firebase project as your backend / Flutter app.
+  A different project’s plist will still “run” in the app but pushes from the API will never arrive.
+-->
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>REPLACE_ME_FROM_FIREBASE_CONSOLE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>REPLACE_ME_FROM_FIREBASE_CONSOLE</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.prelura.preloved</string>
+	<key>PROJECT_ID</key>
+	<string>your-new-firebase-project-id</string>
+	<key>STORAGE_BUCKET</key>
+	<string>your-new-firebase-project-id.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>GOOGLE_APP_ID</key>
+	<string>REPLACE_ME_FROM_FIREBASE_CONSOLE</string>
+</dict>
+</plist>
