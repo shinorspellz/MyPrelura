@@ -322,6 +322,9 @@ struct NotificationDestinationView: View {
 private struct NotificationRowView: View {
     let notification: AppNotification
 
+    /// Slightly larger than `Theme.Typography.caption` (13pt) for readability.
+    private static let lineFontSize: CGFloat = 15
+
     private var senderUsername: String? {
         notification.sender?.username
     }
@@ -330,15 +333,74 @@ private struct NotificationRowView: View {
         PreluraSupportBranding.isSupportSender(username: senderUsername)
     }
 
-    /// Strips the sender's username from the start of the message (e.g. "shinor Transaction paused" → "Transaction paused").
+    /// Legacy payment success copy stored as "SOLD!… Your item sold for £…" — show same short line as new backend.
+    private var isLegacySellerSaleRow: Bool {
+        let g = (notification.modelGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard g.caseInsensitiveCompare("Order") == .orderedSame else { return false }
+        let m = notification.message
+        return m.localizedCaseInsensitiveContains("your item sold")
+            || m.range(of: "SOLD!", options: .caseInsensitive) != nil
+    }
+
+    /// Bell list line: always show who it’s from. If the API omits the username in `message`, prepend `sender.username`.
     private var displayMessage: String {
-        let msg = notification.message
-        guard let username = notification.sender?.username, !username.isEmpty else { return msg }
-        let prefix = username + " "
-        if msg.hasPrefix(prefix) {
-            return String(msg.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        let msg = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isSupportNotification { return msg }
+        if isLegacySellerSaleRow,
+           let username = notification.sender?.username?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty {
+            return "\(username) bought your item"
         }
-        return msg
+        guard let username = notification.sender?.username?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty else {
+            return msg
+        }
+        let lowerMsg = msg.lowercased()
+        let lowerUser = username.lowercased()
+        if lowerMsg.hasPrefix(lowerUser + " ") || lowerMsg == lowerUser {
+            return msg
+        }
+        return "\(username) \(msg)"
+    }
+
+    private var usernamePrefixAndBody: (username: String, body: String)? {
+        if isSupportNotification { return nil }
+        guard let u = notification.sender?.username?.trimmingCharacters(in: .whitespacesAndNewlines), !u.isEmpty else { return nil }
+        let msg = displayMessage
+        guard msg.lowercased().hasPrefix(u.lowercased()) else { return nil }
+        let nameEnd = msg.index(msg.startIndex, offsetBy: u.count)
+        guard nameEnd <= msg.endIndex else { return nil }
+        let namePart = String(msg[..<nameEnd])
+        if nameEnd < msg.endIndex, msg[nameEnd] == " " {
+            let afterSpace = msg.index(after: nameEnd)
+            return (namePart, String(msg[afterSpace...]))
+        }
+        if nameEnd == msg.endIndex { return (namePart, "") }
+        return nil
+    }
+
+    private var notificationBodyFont: Font {
+        .system(size: Self.lineFontSize, weight: .regular)
+    }
+
+    private var notificationUsernameFont: Font {
+        .system(size: Self.lineFontSize, weight: .semibold)
+    }
+
+    @ViewBuilder
+    private var messageText: some View {
+        let primary = Theme.Colors.primaryText
+        if let parts = usernamePrefixAndBody {
+            let tail = parts.body.isEmpty ? "" : " " + parts.body
+            (Text(parts.username).font(notificationUsernameFont).foregroundColor(primary)
+                + Text(tail).font(notificationBodyFont).foregroundColor(primary))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        } else {
+            Text(displayMessage)
+                .font(notificationBodyFont)
+                .foregroundColor(primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        }
     }
 
     var body: some View {
@@ -372,14 +434,11 @@ private struct NotificationRowView: View {
                     )
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(displayMessage)
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.primaryText)
-                    .lineLimit(2)
+                messageText
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let date = notification.createdAt {
                     Text(formatDate(date))
-                        .font(Theme.Typography.caption)
+                        .font(notificationBodyFont)
                         .foregroundColor(Theme.Colors.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
