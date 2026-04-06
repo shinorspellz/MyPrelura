@@ -31,11 +31,14 @@ final class AppRouter: ObservableObject {
     @Published var pendingItem: DeepLinkDestinationItem?
     /// When set, `MainTabView` switches to Inbox and pushes this thread on the tab’s `NavigationStack` (same UX as opening from the list).
     @Published var pendingInboxChat: PendingInboxChatNavigation?
+    /// Myprelura staff: local notification tap to open Console (`myprelura_open_console` / `page: STAFF_CONSOLE`).
+    @Published var pendingStaffConsoleOpen = false
 
     /// Hosts that serve `/item/{slug}` universal links for this app. Keep in sync with entitlements **Associated Domains** and the site’s `apple-app-site-association`.
     private static func isPreluraItemUniversalLinkHost(_ host: String) -> Bool {
         switch host.lowercased() {
-        case "prelura.uk", "www.prelura.uk", "prelura.com", "www.prelura.com":
+        case "wearhouse.co.uk", "www.wearhouse.co.uk",
+             "prelura.uk", "www.prelura.uk", "prelura.com", "www.prelura.com":
             return true
         default:
             return false
@@ -49,7 +52,7 @@ final class AppRouter: ObservableObject {
         return r
     }
 
-    /// Handle URL (e.g. prelura://product/Ab3xY9k2Mn, https://prelura.uk/item/Ab3xY9k2Mn, prelura://user/john).
+    /// Handle URL (e.g. prelura://product/Ab3xY9k2Mn, https://wearhouse.co.uk/item/Ab3xY9k2Mn, prelura://user/john).
     func handle(url: URL) {
         var dest: DeepLinkDestination?
         let scheme = (url.scheme ?? "").lowercased()
@@ -192,6 +195,14 @@ final class AppRouter: ObservableObject {
     /// Also accepts `username` / `sender_username` for chat; `title` may come from aps.alert.
     func handle(notificationPayload: [AnyHashable: Any]) {
         let p = Self.normalizedPushUserInfo(notificationPayload)
+        if Self.pushTruthy(p, "myprelura_open_console") {
+            Task { @MainActor in self.pendingStaffConsoleOpen = true }
+            return
+        }
+        if Self.pushString(p, "page")?.uppercased() == "STAFF_CONSOLE" {
+            Task { @MainActor in self.pendingStaffConsoleOpen = true }
+            return
+        }
         var page = Self.pushString(p, "page")?.trimmingCharacters(in: .whitespacesAndNewlines)
         if page?.isEmpty != false {
             let hasConv = Self.conversationIdFromPayload(p) != nil
@@ -272,6 +283,12 @@ final class AppRouter: ObservableObject {
     func clearPending() {
         Task { @MainActor in
             self.pendingItem = nil
+        }
+    }
+
+    func clearPendingStaffConsole() {
+        Task { @MainActor in
+            self.pendingStaffConsoleOpen = false
         }
     }
 }

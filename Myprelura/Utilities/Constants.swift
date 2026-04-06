@@ -23,8 +23,8 @@ struct Constants {
     
     /// Used when inviting contacts (share sheet / SMS).
     static let inviteToPreluraURL = "https://prelura.voltislabs.uk"
-    /// Public web URLs for sharing listings and universal links (`/item/{slug}`: listing code or legacy numeric id). Must match **Associated Domains** / `apple-app-site-association` on this host (production: prelura.uk).
-    static let publicWebItemLinkBaseURL = "https://prelura.uk"
+    /// Public web URLs for sharing listings and universal links (`/item/{slug}`: listing code or legacy numeric id). Must match **Associated Domains** / `apple-app-site-association` on this host (production: wearhouse.co.uk).
+    static let publicWebItemLinkBaseURL = "https://wearhouse.co.uk"
     
     // API Configuration
     static let apiTimeout: TimeInterval = 60.0
@@ -36,6 +36,8 @@ struct Constants {
     static let appearanceModeStorageKey = "appearance_mode"
     /// Alias for staff settings UI (same host as `publicWebItemLinkBaseURL`).
     static var publicWebBaseURL: String { publicWebItemLinkBaseURL }
+    /// HEAD target for Console “Public web” probe (`/` often blocks HEAD on SPAs; robots.txt is reliable).
+    static var publicWebHealthProbeURL: String { "\(publicWebItemLinkBaseURL)/robots.txt" }
 
     static func publicProfileURL(username: String) -> URL? {
         let u = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

@@ -2,7 +2,7 @@ import SwiftUI
 import SafariServices
 import WebKit
 
-// MARK: - Safari (public prelura.uk — same rendering as Safari; WKWebView often stays blank on the SPA)
+// MARK: - Safari (public wearhouse.co.uk — same rendering as Safari; WKWebView often stays blank on the SPA)
 
 /// Uses `SFSafariViewController` so profile and listing pages match what users see in the main app / Safari.
 struct SafariViewRepresentable: UIViewControllerRepresentable {
@@ -24,7 +24,7 @@ struct SafariViewRepresentable: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
-/// Same public pages shoppers use (`prelura.uk`); **Safari** engine avoids empty WKWebView on the Next/React site.
+/// Same public pages shoppers use (`wearhouse.co.uk`); **Safari** engine avoids empty WKWebView on the Next/React site.
 struct ConsumerWebPageView: View {
     let url: URL
     let title: String

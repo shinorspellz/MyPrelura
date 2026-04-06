@@ -6,6 +6,8 @@
 	<string>production</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:wearhouse.co.uk</string>
+		<string>applinks:www.wearhouse.co.uk</string>
 		<string>applinks:prelura.uk</string>
 		<string>applinks:www.prelura.uk</string>
 		<string>applinks:prelura.com</string>
