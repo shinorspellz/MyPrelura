@@ -8,6 +8,8 @@ struct SellLabeledField: View {
     @Binding var text: String
     var minLines: Int = 1
     var maxLines: Int? = nil
+    /// When true (multiline only), `#tags` are shown in the primary colour while editing.
+    var highlightHashtags: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -25,12 +27,17 @@ struct SellLabeledField: View {
                             .padding(.horizontal, Theme.Spacing.md)
                             .padding(.vertical, Theme.Spacing.md)
                     }
-                    TextEditor(text: $text)
-                        .font(Theme.Typography.body)
-                        .foregroundColor(Theme.Colors.primaryText)
-                        .scrollContentBackground(.hidden)
-                        .padding(Theme.Spacing.sm)
-                        .frame(minHeight: minLines > 1 ? CGFloat(minLines) * 24 : 44)
+                    if highlightHashtags {
+                        HashtagHighlightingTextEditor(text: $text)
+                            .frame(minHeight: minLines > 1 ? CGFloat(minLines) * 24 : 44)
+                    } else {
+                        TextEditor(text: $text)
+                            .font(Theme.Typography.body)
+                            .foregroundColor(Theme.Colors.primaryText)
+                            .scrollContentBackground(.hidden)
+                            .padding(Theme.Spacing.sm)
+                            .frame(minHeight: minLines > 1 ? CGFloat(minLines) * 24 : 44)
+                    }
                 }
                 .background(Theme.Colors.secondaryBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 30))

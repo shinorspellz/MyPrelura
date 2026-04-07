@@ -1,7 +1,10 @@
 import SwiftUI
+import UIKit
 
 /// Invite a friend — redesigned: one intro, three equal-weight actions in a single list style.
 struct InviteFriendView: View {
+    @EnvironmentObject private var authService: AuthService
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
@@ -87,6 +90,21 @@ struct InviteFriendView: View {
     }
 
     private func shareProfileLink() {
-        // TODO: copy or share profile URL
+        guard let username = authService.username?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty else { return }
+        let enc = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        guard let web = URL(string: "\(Constants.universalLinksAPIBaseURL)/app/u/\(enc)/"),
+              let appURL = URL(string: "prelura://user/\(enc)") else { return }
+        let text = "Check out my profile on Wearhouse: \(web.absoluteString)"
+        let av = UIActivityViewController(activityItems: [text, web, appURL], applicationActivities: nil)
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = windowScene.windows.first?.rootViewController else { return }
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        if let pop = av.popoverPresentationController {
+            pop.sourceView = top.view
+            pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+            pop.permittedArrowDirections = []
+        }
+        top.present(av, animated: true)
     }
 }

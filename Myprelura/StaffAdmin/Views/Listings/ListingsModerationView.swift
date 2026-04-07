@@ -12,6 +12,22 @@ private enum ListingStatusChip: String, CaseIterable {
     }
 }
 
+private enum StaffListingSort: String, CaseIterable, Identifiable {
+    case newest = "NEWEST"
+    case priceAsc = "PRICE_ASC"
+    case priceDesc = "PRICE_DESC"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .newest: return "Newest first"
+        case .priceAsc: return "Price: low to high"
+        case .priceDesc: return "Price: high to low"
+        }
+    }
+}
+
 struct ListingsModerationView: View {
     var wrapsInNavigationStack: Bool = true
 
@@ -23,7 +39,32 @@ struct ListingsModerationView: View {
     @State private var errorMessage: String?
     @State private var flagProduct: ProductBrowseRow?
     @State private var statusChip: ListingStatusChip = .active
+    @State private var sortOption: StaffListingSort = .newest
+    @State private var searchText = ""
+    @State private var appliedMinPrice: Double?
+    @State private var appliedMaxPrice: Double?
+    @State private var showFilterSheet = false
+    @State private var draftMinPrice = ""
+    @State private var draftMaxPrice = ""
     private let pageSize = 25
+
+    private var trimmedSearch: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var listingsLoadSignature: String {
+        [
+            statusChip.rawValue,
+            sortOption.rawValue,
+            trimmedSearch,
+            appliedMinPrice.map { String($0) } ?? "",
+            appliedMaxPrice.map { String($0) } ?? "",
+        ].joined(separator: "\u{1e}")
+    }
+
+    private var hasActiveListingFilters: Bool {
+        appliedMinPrice != nil || appliedMaxPrice != nil
+    }
 
     var body: some View {
         Group {
@@ -37,23 +78,15 @@ struct ListingsModerationView: View {
 
     private var listingsRoot: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Choose Active (live marketplace) or Sold for moderation. Tap a row for the native listing detail (same as the shopper app). Use Share for the public prelura.uk link. Flag from the toolbar or row menu.")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-
-                HStack(spacing: 8) {
-                    ForEach(ListingStatusChip.allCases, id: \.self) { chip in
-                        listingStatusChipButton(chip)
-                    }
-                    Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                ForEach(ListingStatusChip.allCases, id: \.self) { chip in
+                    listingStatusChipButton(chip)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
 
             List {
                 if let errorMessage {
@@ -89,7 +122,7 @@ struct ListingsModerationView: View {
                                 Text(p.name ?? "Listing \(p.id)")
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.primaryText)
-                                Text("@\(p.seller?.username ?? "—") · \(p.status ?? "") · \(priceText(p.price))")
+                                Text(listingRowMetaLine(p))
                                     .font(Theme.Typography.footnote)
                                     .foregroundStyle(Theme.Colors.secondaryText)
                             }
@@ -118,17 +151,53 @@ struct ListingsModerationView: View {
         .navigationTitle("Listings")
         .navigationBarTitleDisplayMode(.inline)
         .adminNavigationChrome()
-        .task { await refresh() }
-        .onChange(of: statusChip) { _, _ in
-            Task { await refresh() }
+        .searchable(text: $searchText, prompt: "Search title or brand")
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    Section("Sort") {
+                        ForEach(StaffListingSort.allCases) { opt in
+                            Button {
+                                sortOption = opt
+                            } label: {
+                                HStack {
+                                    Text(opt.title)
+                                    if sortOption == opt {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .foregroundStyle(Theme.Colors.primaryText)
+                }
+                .accessibilityLabel("Sort listings")
+
+                Button {
+                    draftMinPrice = appliedMinPrice.map { priceDraftString($0) } ?? ""
+                    draftMaxPrice = appliedMaxPrice.map { priceDraftString($0) } ?? ""
+                    showFilterSheet = true
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(hasActiveListingFilters ? Theme.primaryColor : Theme.Colors.primaryText)
+                }
+                .accessibilityLabel("Filter listings")
+            }
         }
+        .sheet(isPresented: $showFilterSheet) {
+            listingFilterSheet
+        }
+        .task(id: listingsLoadSignature) { await refresh() }
         .navigationDestination(for: ProductBrowseRow.self) { p in
-            ListingStaffDetailView(product: p) {
+            StaffListingDetailView(product: p) {
                 flagProduct = p
             }
         }
         .sheet(item: $flagProduct) { p in
             ListingFlagSheet(product: p)
+                .environment(session)
         }
     }
 
@@ -180,6 +249,36 @@ struct ListingsModerationView: View {
         return String(format: "£%.2f", p)
     }
 
+    private func listingRowMetaLine(_ p: ProductBrowseRow) -> String {
+        let user = "@\(p.seller?.username ?? "—")"
+        let st = p.status ?? ""
+        let price = priceText(p.price)
+        if let rel = Self.relativeListingAgeShort(iso: p.createdAt), !rel.isEmpty {
+            return "\(user) · \(st) · \(price) · \(rel)"
+        }
+        return "\(user) · \(st) · \(price)"
+    }
+
+    /// Short relative age for list rows (e.g. "2 min", "5 hr") — matches shopper-style footers.
+    private static func relativeListingAgeShort(iso: String?) -> String? {
+        guard let iso, !iso.isEmpty else { return nil }
+        let parsers: [ISO8601DateFormatter] = {
+            let f1 = ISO8601DateFormatter()
+            f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let f2 = ISO8601DateFormatter()
+            f2.formatOptions = [.withInternetDateTime]
+            return [f1, f2]
+        }()
+        guard let date = parsers.compactMap({ $0.date(from: iso) }).first else { return nil }
+        let now = Date()
+        if now.timeIntervalSince(date) < 60 { return "now" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        let s = f.localizedString(for: date, relativeTo: now)
+        if s.lowercased().hasPrefix("in ") { return nil }
+        return s
+    }
+
     private func listingStatusChipButton(_ chip: ListingStatusChip) -> some View {
         let selected = chip == statusChip
         return Button {
@@ -207,6 +306,70 @@ struct ListingsModerationView: View {
         }
     }
 
+    private var listingFilterSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Price uses the listing’s GBP price. Use the navigation search field for title or brand.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                Section("Price (£)") {
+                    TextField("Minimum", text: $draftMinPrice)
+                        .keyboardType(.decimalPad)
+                    TextField("Maximum", text: $draftMaxPrice)
+                        .keyboardType(.decimalPad)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Colors.modalSheetBackground)
+            .navigationTitle("Filter listings")
+            .navigationBarTitleDisplayMode(.inline)
+            .adminNavigationChrome()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { showFilterSheet = false }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Apply") {
+                        appliedMinPrice = parsePriceDraft(draftMinPrice)
+                        appliedMaxPrice = parsePriceDraft(draftMaxPrice)
+                        showFilterSheet = false
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button("Clear all filters") {
+                    searchText = ""
+                    draftMinPrice = ""
+                    draftMaxPrice = ""
+                    appliedMinPrice = nil
+                    appliedMaxPrice = nil
+                    showFilterSheet = false
+                }
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
+    private func priceDraftString(_ value: Double) -> String {
+        if value.rounded() == value {
+            return String(format: "%.0f", value)
+        }
+        return String(value)
+    }
+
+    private func parsePriceDraft(_ raw: String) -> Double? {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        let normalized = s.replacingOccurrences(of: ",", with: ".")
+        return Double(normalized)
+    }
+
     private func refresh() async {
         page = 1
         isLoading = true
@@ -217,7 +380,11 @@ struct ListingsModerationView: View {
                 client: session.graphQL,
                 page: 1,
                 pageSize: pageSize,
-                statusFilter: statusFilterParam()
+                statusFilter: statusFilterParam(),
+                sort: sortOption.rawValue,
+                search: trimmedSearch.isEmpty ? nil : trimmedSearch,
+                minPrice: appliedMinPrice,
+                maxPrice: appliedMaxPrice
             )
             rows = result.rows
             hasMore = result.hasMore
@@ -235,7 +402,11 @@ struct ListingsModerationView: View {
                 client: session.graphQL,
                 page: page,
                 pageSize: pageSize,
-                statusFilter: statusFilterParam()
+                statusFilter: statusFilterParam(),
+                sort: sortOption.rawValue,
+                search: trimmedSearch.isEmpty ? nil : trimmedSearch,
+                minPrice: appliedMinPrice,
+                maxPrice: appliedMaxPrice
             )
             rows.append(contentsOf: result.rows)
             hasMore = result.hasMore
@@ -243,30 +414,6 @@ struct ListingsModerationView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-private struct ListingStaffDetailView: View {
-    @EnvironmentObject private var authService: AuthService
-    let product: ProductBrowseRow
-    let onFlag: () -> Void
-
-    private var item: Item { Item.fromStaffProductBrowse(product) }
-
-    var body: some View {
-        ItemDetailView(item: item, authService: authService)
-            .background(Theme.Colors.background)
-            .adminNavigationChrome()
-            .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    if let url = Constants.publicProductURL(productId: product.id, listingCode: product.listingCode) {
-                        ShareLink(item: url) {
-                            Image(systemName: "square.and.arrow.up")
-                        }
-                    }
-                    Button("Flag") { onFlag() }
-                }
-            }
     }
 }
 

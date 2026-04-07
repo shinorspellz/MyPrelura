@@ -82,6 +82,49 @@ final class GraphQLClient: @unchecked Sendable {
         
         return responseData
     }
+
+    /// Like `execute`, but does **not** throw solely because GraphQL returned `errors`. Use for health probes that
+    /// expect resolver-level failures (e.g. wrong password) while still needing HTTP/decode diagnostics.
+    func executeAllowingGraphQLErrors<T: Decodable>(
+        query: String,
+        variables: [String: Any]? = nil,
+        operationName: String? = nil,
+        responseType: T.Type
+    ) async throws -> (data: T?, errors: [GraphQLErrorResponse]?) {
+        var request = URLRequest(url: baseURL)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        var body: [String: Any] = ["query": query]
+        if let variables = variables { body["variables"] = variables }
+        if let operationName = operationName { body["operationName"] = operationName }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GraphQLError.networkError("Invalid response")
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let graphQLResponse: GraphQLResponse<T>
+        do {
+            graphQLResponse = try decoder.decode(GraphQLResponse<T>.self, from: data)
+        } catch {
+            if !(200...299).contains(httpResponse.statusCode) {
+                throw GraphQLError.httpError(httpResponse.statusCode)
+            }
+            throw GraphQLError.decodingError(error)
+        }
+        if !(200...299).contains(httpResponse.statusCode) {
+            throw GraphQLError.httpError(httpResponse.statusCode)
+        }
+        return (graphQLResponse.data, graphQLResponse.errors)
+    }
     
     /// Execute and decode with a custom decoder (e.g. for requests that need different key strategy).
     func execute<T: Decodable>(

@@ -32,6 +32,14 @@ struct SettingsHubView: View {
                 }
             }
 
+            Section("Planning") {
+                NavigationLink {
+                    StaffRoadmapView()
+                } label: {
+                    Label("Roadmap (phase 2+)", systemImage: "map")
+                }
+            }
+
             Section("About") {
                 NavigationLink {
                     AboutSettingsView()

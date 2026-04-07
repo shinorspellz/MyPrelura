@@ -5,6 +5,7 @@ struct UserDetailView: View {
     let username: String
     var summary: UserAdminRow? = nil
     @EnvironmentObject private var authService: AuthService
+    @Environment(AdminSession.self) private var session
 
     private var trimmedUsername: String {
         username.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -21,6 +22,7 @@ struct UserDetailView: View {
 
     var body: some View {
         UserProfileView(seller: seedSeller, authService: authService)
+            .environment(\.staffAdminSession, session)
             .toolbar {
                 if let url = publicProfileURL {
                     ToolbarItem(placement: .primaryAction) {

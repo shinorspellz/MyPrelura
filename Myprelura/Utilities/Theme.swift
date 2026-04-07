@@ -107,6 +107,7 @@ struct Theme {
         static let listingViews = Color(hex: "FF9500")
         static let viewsToday = Color(hex: "FF2D55")
         static let health = Color(hex: "AB28B2")
+        static let console = Color(hex: "5E5CE6")
     }
 
     /// Standard app bar / custom header layout so top-level icons and back buttons stay in the same position.

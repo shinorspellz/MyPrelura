@@ -125,7 +125,7 @@ class UserService: ObservableObject {
             phoneDisplay: phoneDisplay,
             dateOfBirth: dobDate,
             gender: userData.gender,
-            shippingAddress: parseShippingAddress(userData.shippingAddress),
+            shippingAddress: parseShippingAddress(userData.shippingAddress?.normalizedJSONString),
             postageOptions: postageOptions,
             payoutBankAccount: payoutBankAccount
         )
@@ -1835,6 +1835,47 @@ struct GetUserByUsernameResponse: Decodable {
     let getUser: UserProfileData?
 }
 
+/// GraphQL `JSONString` may be a string or an inline JSON object in the HTTP body.
+struct GraphQLJSONStringOrObject: Decodable {
+    let normalizedJSONString: String?
+
+    private struct DynamicCodingKey: CodingKey, Hashable {
+        var stringValue: String
+        init?(stringValue: String) { self.stringValue = stringValue }
+        var intValue: Int? { nil }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        if let keyed = try? decoder.container(keyedBy: DynamicCodingKey.self) {
+            var dict: [String: Any] = [:]
+            for key in keyed.allKeys {
+                if let s = try? keyed.decode(String.self, forKey: key) {
+                    dict[key.stringValue] = s
+                } else if let i = try? keyed.decode(Int.self, forKey: key) {
+                    dict[key.stringValue] = i
+                } else if let d = try? keyed.decode(Double.self, forKey: key) {
+                    dict[key.stringValue] = d
+                } else if let b = try? keyed.decode(Bool.self, forKey: key) {
+                    dict[key.stringValue] = b
+                }
+            }
+            if JSONSerialization.isValidJSONObject(dict), let data = try? JSONSerialization.data(withJSONObject: dict) {
+                normalizedJSONString = String(data: data, encoding: .utf8)
+            } else {
+                normalizedJSONString = nil
+            }
+            return
+        }
+        let c = try decoder.singleValueContainer()
+        if try c.decodeNil() {
+            normalizedJSONString = nil
+            return
+        }
+        normalizedJSONString = try c.decode(String.self)
+    }
+}
+
 struct UserProfileData: Decodable {
     let id: AnyCodable?
     let username: String?
@@ -1846,7 +1887,7 @@ struct UserProfileData: Decodable {
     let gender: String?
     let dob: String?  // ISO date string from API
     let phone: UserPhoneData?
-    let shippingAddress: String?  // JSONString from API (JSON string)
+    let shippingAddress: GraphQLJSONStringOrObject?
     let location: LocationData?
     let listing: Int?
     let noOfFollowing: Int?

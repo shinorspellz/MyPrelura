@@ -133,6 +133,7 @@ enum L10n {
         "Item says \"Delivered\" but I don't have it": "Γράφει \"Παραδόθηκε\" αλλά δεν το έχω λάβει",
         "What's Vacation mode?": "Τι είναι η λειτουργία αργίας;",
         "How do I earn a trusted seller badge?": "Πώς κερδίζω το σήμα αξιόπιστου πωλητή;",
+        "No matching topics": "Δεν βρέθηκαν σχετικά θέματα",
         "Start a conversation": "Ξεκινήστε συνομιλία",
         "e.g. How do I change my profile photo?": "π.χ. Πώς αλλάζω τη φωτογραφία προφίλ μου;",
 

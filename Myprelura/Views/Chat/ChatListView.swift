@@ -213,7 +213,6 @@ struct ChatListView: View {
             }
             if path.isEmpty, let preview = tabCoordinator.lastMessagePreviewForConversation {
                 inboxViewModel.updatePreview(conversationId: preview.id, text: preview.text, date: preview.date)
-                tabCoordinator.lastMessagePreviewForConversation = nil
             }
             if let conv = tabCoordinator.pendingOpenConversation {
                 tabCoordinator.pendingOpenConversation = nil
@@ -229,7 +228,6 @@ struct ChatListView: View {
             if oldCount > 0, newCount == 0, !authService.isGuestMode {
                 if let preview = tabCoordinator.lastMessagePreviewForConversation {
                     inboxViewModel.updatePreview(conversationId: preview.id, text: preview.text, date: preview.date)
-                    tabCoordinator.lastMessagePreviewForConversation = nil
                 }
                 if let conv = tabCoordinator.pendingArchiveWithUndo {
                     tabCoordinator.pendingArchiveWithUndo = nil
@@ -321,7 +319,7 @@ struct ChatListView: View {
     private func loadInboxConversations() async {
         let preview = tabCoordinator.lastMessagePreviewForConversation
         let previewTuple: (id: String, text: String, date: Date)? = preview.map { ($0.id, $0.text, $0.date) }
-        await inboxViewModel.loadConversationsAsync(preview: previewTuple)
+        await inboxViewModel.loadConversationsAsync(preview: previewTuple, currentUsername: authService.username)
         if preview != nil { tabCoordinator.lastMessagePreviewForConversation = nil }
     }
     

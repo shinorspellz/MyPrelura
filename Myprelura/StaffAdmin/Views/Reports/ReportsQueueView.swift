@@ -1,17 +1,26 @@
 import SwiftUI
 
+private let orderIssueReportType = "ORDER_ISSUE"
+private let profanityReportType = "PROFANITY"
+
 struct ReportsQueueView: View {
     var wrapsInNavigationStack: Bool = true
 
     @Environment(AdminSession.self) private var session
+    @EnvironmentObject private var authService: AuthService
     @State private var reports: [StaffAdminReportRow] = []
     @State private var errorMessage: String?
     @State private var filterText = ""
     @State private var selectedTypeTag: String?
 
-    private var typeTags: [String] {
+    private var typeTagsFromData: [String] {
         let types = Set(reports.compactMap(\.reportType).filter { !$0.isEmpty })
-        return types.sorted()
+        return types.filter { $0 != orderIssueReportType && $0 != profanityReportType }.sorted()
+    }
+
+    private func chipTitle(for tag: String) -> String {
+        if tag == profanityReportType { return "Profanity" }
+        return tag
     }
 
     private var filtered: [StaffAdminReportRow] {
@@ -41,67 +50,72 @@ struct ReportsQueueView: View {
     }
 
     private var reportsRoot: some View {
-        List {
-            if let errorMessage {
-                Text(errorMessage).foregroundStyle(Theme.Colors.error)
-            }
-            if !typeTags.isEmpty {
-                Section {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            typeChip(title: "All", tag: nil)
-                            ForEach(typeTags, id: \.self) { tag in
-                                typeChip(title: tag, tag: tag)
+        VStack(alignment: .leading, spacing: 0) {
+            chipScrollRow
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 6)
+
+            List {
+                if let errorMessage {
+                    Text(errorMessage).foregroundStyle(Theme.Colors.error)
+                }
+                ForEach(filtered) { r in
+                    NavigationLink(value: r) {
+                        HStack(alignment: .center, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text((r.reportType ?? "REPORT").uppercased())
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(Theme.primaryColor.opacity(0.2))
+                                        .clipShape(Capsule())
+                                    Spacer()
+                                    Text(r.status ?? "")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                }
+                                Text(r.reason ?? "No reason")
+                                    .font(Theme.Typography.headline)
+                                    .foregroundStyle(Theme.Colors.primaryText)
+                                if let ctx = r.context, !ctx.isEmpty {
+                                    Text(ctx)
+                                        .font(Theme.Typography.footnote)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                        .lineLimit(4)
+                                }
+                                if r.reportType == "PRODUCT" {
+                                    Text("Listing #\(r.productId ?? 0) · \(r.productName ?? "")")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                } else if r.reportType == orderIssueReportType, let oid = r.orderId {
+                                    Text("Order #\(oid)")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                } else if let u = r.accountReportedUsername {
+                                    Text("@\(u)")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                }
+                                if let by = r.reportedByUsername {
+                                    Text("Reporter: @\(by)")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.tertiaryText)
+                                }
+                            }
+                            if r.hasLinkedChat {
+                                Image(systemName: "bubble.left.and.bubble.right.fill")
+                                    .font(.body)
+                                    .foregroundStyle(Theme.primaryColor)
+                                    .accessibilityLabel("Has linked chat")
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 4)
                     }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    .listRowBackground(Color.clear)
                 }
             }
-            ForEach(filtered) { r in
-                NavigationLink(value: r) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text((r.reportType ?? "REPORT").uppercased())
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Theme.primaryColor.opacity(0.2))
-                                .clipShape(Capsule())
-                            Spacer()
-                            Text(r.status ?? "")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                        }
-                        Text(r.reason ?? "No reason")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.primaryText)
-                        if let ctx = r.context, !ctx.isEmpty {
-                            Text(ctx)
-                                .font(Theme.Typography.footnote)
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                                .lineLimit(4)
-                        }
-                        if r.reportType == "PRODUCT" {
-                            Text("Listing #\(r.productId ?? 0) · \(r.productName ?? "")")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                        } else if let u = r.accountReportedUsername {
-                            Text("@\(u)")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                        }
-                        if let by = r.reportedByUsername {
-                            Text("Reporter: @\(by)")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.tertiaryText)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-            }
+            .listStyle(.plain)
         }
         .navigationTitle("Reports")
         .navigationBarTitleDisplayMode(.inline)
@@ -113,6 +127,20 @@ struct ReportsQueueView: View {
         .task { await load() }
         .navigationDestination(for: StaffAdminReportRow.self) { r in
             AdminReportDetailView(report: r)
+                .environmentObject(authService)
+        }
+    }
+
+    private var chipScrollRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                typeChip(title: "All", tag: nil)
+                typeChip(title: "Order issue", tag: orderIssueReportType)
+                typeChip(title: "Profanity", tag: profanityReportType)
+                ForEach(typeTagsFromData, id: \.self) { tag in
+                    typeChip(title: chipTitle(for: tag), tag: tag)
+                }
+            }
         }
     }
 

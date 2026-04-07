@@ -40,8 +40,11 @@ struct AnalyticsOverviewDTO: Decodable, Hashable {
     let newUsersPercentageChange: Double?
 }
 
-struct StaffAdminReportRow: Decodable, Identifiable, Hashable {
-    let id: Int
+/// Admin queue row. `backendRowId` is the source table’s PK and **can collide** across ACCOUNT vs PRODUCT;
+/// use `id` (Identifiable) for SwiftUI, which is `reportType + backendRowId`.
+struct StaffAdminReportRow: Decodable, Hashable {
+    /// Primary key from the originating model (product report, account report, or order issue).
+    let backendRowId: Int
     let publicId: String?
     let reportType: String?
     let reason: String?
@@ -56,6 +59,47 @@ struct StaffAdminReportRow: Decodable, Identifiable, Hashable {
     let productName: String?
     let supportConversationId: Int?
     let conversationId: Int?
+    /// Populated for `ORDER_ISSUE` rows from the admin queue.
+    let orderId: Int?
+    let sellerSupportConversationId: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case backendRowId = "id"
+        case publicId
+        case reportType
+        case reason
+        case context
+        case imagesUrl
+        case status
+        case dateCreated
+        case updatedAt
+        case reportedByUsername
+        case accountReportedUsername
+        case productId
+        case productName
+        case supportConversationId
+        case conversationId
+        case orderId
+        case sellerSupportConversationId
+    }
+
+    /// True if any buyer/seller or support thread is linked (list row chat glyph).
+    var hasLinkedChat: Bool {
+        conversationId != nil || supportConversationId != nil || sellerSupportConversationId != nil
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(reportType)
+        hasher.combine(backendRowId)
+    }
+
+    static func == (lhs: StaffAdminReportRow, rhs: StaffAdminReportRow) -> Bool {
+        lhs.reportType == rhs.reportType && lhs.backendRowId == rhs.backendRowId
+    }
+}
+
+extension StaffAdminReportRow: Identifiable {
+    var id: String { "\(reportType ?? "UNK")-\(backendRowId)" }
 }
 
 struct UserAdminRow: Decodable, Identifiable, Hashable {
@@ -87,6 +131,8 @@ struct ProductBrowseRow: Decodable, Identifiable, Hashable {
     let name: String?
     let listingCode: String?
     let status: String?
+    /// ISO8601 from GraphQL `createdAt` when requested (staff listings).
+    let createdAt: String?
     /// Normalised listing price (GraphQL `price` may be JSON int or float).
     let price: Double?
     let seller: SellerBrief?
@@ -102,7 +148,7 @@ struct ProductBrowseRow: Decodable, Identifiable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, listingCode, status, price, seller, imagesUrl
+        case id, name, listingCode, status, createdAt, price, seller, imagesUrl
     }
 
     init(from decoder: Decoder) throws {
@@ -117,6 +163,7 @@ struct ProductBrowseRow: Decodable, Identifiable, Hashable {
         name = try c.decodeIfPresent(String.self, forKey: .name)
         listingCode = try c.decodeIfPresent(String.self, forKey: .listingCode)
         status = try c.decodeIfPresent(String.self, forKey: .status)
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         if let d = try? c.decode(Double.self, forKey: .price) {
             price = d
         } else if let i = try? c.decode(Int.self, forKey: .price) {

@@ -5,6 +5,7 @@ import Shimmer
 struct UserProfileView: View {
     let seller: User
     @EnvironmentObject var authService: AuthService
+    @Environment(\.staffAdminSession) private var staffAdminSession
     @StateObject private var viewModel: UserProfileViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var selectedBrand: String? = nil
@@ -22,6 +23,7 @@ struct UserProfileView: View {
     @State private var isMultiBuySelectionMode: Bool = false
     @State private var selectedMultiBuyItemIds: Set<String> = []
     @State private var shopSearchQuery: String = ""
+    @State private var showProfileModerationMenu = false
 
     init(seller: User, authService: AuthService?) {
         self.seller = seller
@@ -90,7 +92,10 @@ struct UserProfileView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(PlainTappableButtonStyle())
-                    NavigationLink(destination: ReportUserView(username: viewModel.user.username)) {
+                    Button(action: {
+                        HapticManager.selection()
+                        showProfileModerationMenu = true
+                    }) {
                         Image(systemName: "flag")
                             .foregroundColor(Theme.Colors.primaryText)
                             .frame(width: Theme.AppBar.buttonSize, height: Theme.AppBar.buttonSize)
@@ -104,6 +109,15 @@ struct UserProfileView: View {
         .refreshable { await viewModel.refreshAsync() }
         .onAppear {
             viewModel.load()
+        }
+        .sheet(isPresented: $showProfileModerationMenu) {
+            NavigationStack {
+                StaffProfileModerationMenuView(
+                    username: viewModel.user.username,
+                    userId: viewModel.user.userId,
+                    staffGraphQL: staffAdminSession?.graphQL
+                )
+            }
         }
         .overlay {
             if showProfilePhotoFullScreen, let urlString = viewModel.user.avatarURL, !urlString.isEmpty, let url = URL(string: urlString) {

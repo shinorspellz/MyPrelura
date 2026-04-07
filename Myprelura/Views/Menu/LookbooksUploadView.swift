@@ -10,6 +10,15 @@ import PhotosUI
 import CoreImage
 import UIKit
 
+private func lookbookCaptionKeyboardAccessory(target: Any?, action: Selector) -> UIToolbar {
+    let bar = UIToolbar()
+    bar.sizeToFit()
+    let flex = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
+    let done = UIBarButtonItem(barButtonSystemItem: .done, target: target, action: action)
+    bar.items = [flex, done]
+    return bar
+}
+
 // MARK: - Hashtag-aware caption field (hashtags shown in primary colour)
 
 /// Text field that displays #hashtag segments in primary colour. Used for lookbook caption and any hashtag field.
@@ -67,6 +76,7 @@ private struct HashtagTextFieldRepresentable: UIViewRepresentable {
         field.textColor = UIColor.label
         field.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.foregroundColor: UIColor.secondaryLabel])
         field.backgroundColor = .clear
+        field.inputAccessoryView = lookbookCaptionKeyboardAccessory(target: context.coordinator, action: #selector(Coordinator.dismissKeyboard))
         return field
     }
 
@@ -108,6 +118,10 @@ private struct HashtagTextFieldRepresentable: UIViewRepresentable {
         @objc func editingChanged(_ field: UITextField) {
             parent.text = field.text ?? ""
         }
+
+        @objc func dismissKeyboard() {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
 }
 
@@ -124,6 +138,10 @@ private struct HashtagTextEditorRepresentable: UIViewRepresentable {
         tv.backgroundColor = .clear
         tv.textContainerInset = .zero
         tv.textContainer.lineFragmentPadding = 0
+        tv.inputAccessoryView = lookbookCaptionKeyboardAccessory(
+            target: context.coordinator,
+            action: #selector(Coordinator.dismissKeyboard)
+        )
         return tv
     }
 
@@ -143,6 +161,10 @@ private struct HashtagTextEditorRepresentable: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text ?? ""
+        }
+
+        @objc func dismissKeyboard() {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
     }
 }
@@ -254,124 +276,130 @@ struct LookbooksUploadView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Upload banner: full width, placeholder or selected image
-            PhotosPicker(
-                selection: $selectedItems,
-                maxSelectionCount: Self.maxPhotosPerPost,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                Group {
-                    if selectedImages.count == 1, let image = selectedImages.first {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity)
-                    } else if selectedImages.count > 1 {
-                        TabView {
-                            ForEach(Array(selectedImages.enumerated()), id: \.offset) { _, image in
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Upload banner: full width, placeholder or selected image
+                    PhotosPicker(
+                        selection: $selectedItems,
+                        maxSelectionCount: Self.maxPhotosPerPost,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        Group {
+                            if selectedImages.count == 1, let image = selectedImages.first {
                                 Image(uiImage: image)
                                     .resizable()
                                     .scaledToFit()
                                     .frame(maxWidth: .infinity)
+                            } else if selectedImages.count > 1 {
+                                TabView {
+                                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { _, image in
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                }
+                                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                                .frame(minHeight: 220)
+                            } else {
+                                VStack(spacing: Theme.Spacing.md) {
+                                    Image(systemName: "photo.badge.plus")
+                                        .font(.system(size: 44))
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                    Text("Tap to choose photos")
+                                        .font(Theme.Typography.body)
+                                        .foregroundColor(Theme.Colors.secondaryText)
+                                    Text("Up to \(Self.maxPhotosPerPost) — shows as one carousel post")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.secondaryText)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 200)
+                                .background(Theme.Colors.secondaryBackground)
                             }
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .automatic))
-                        .frame(minHeight: 220)
-                    } else {
-                        VStack(spacing: Theme.Spacing.md) {
-                            Image(systemName: "photo.badge.plus")
-                                .font(.system(size: 44))
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                            Text("Tap to choose photos")
-                                .font(Theme.Typography.body)
-                                .foregroundColor(Theme.Colors.secondaryText)
-                            Text("Up to \(Self.maxPhotosPerPost) — shows as one carousel post")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.secondaryText)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 200)
-                        .background(Theme.Colors.secondaryBackground)
+                        .contentShape(Rectangle())
                     }
+                    .onChange(of: selectedItems) { _, newValue in
+                        Task { await loadImages(from: newValue) }
+                    }
+
+                    if !selectedImages.isEmpty {
+                        // Tagged products (shown after returning from Tag screen)
+                        if !taggedProductItems.isEmpty {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                Text("Tagged products")
+                                    .font(Theme.Typography.body)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(Theme.Colors.primaryText)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: Theme.Spacing.sm) {
+                                        ForEach(taggedProductItems, id: \.id) { item in
+                                            taggedProductChip(item)
+                                        }
+                                    }
+                                    .padding(.vertical, Theme.Spacing.xs)
+                                }
+                            }
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .padding(.top, Theme.Spacing.md)
+                        }
+
+                        // Style pills: select up to 3
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Style tags")
+                                .font(Theme.Typography.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(Theme.Colors.secondaryText)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: Theme.Spacing.sm) {
+                                    ForEach(lookbookUploadStylePills, id: \.self) { raw in
+                                        let isSelected = selectedStylePills.contains(raw)
+                                        let canSelect = selectedStylePills.count < Self.maxStylePills || isSelected
+                                        Button(action: {
+                                            if isSelected {
+                                                selectedStylePills.remove(raw)
+                                            } else if canSelect {
+                                                selectedStylePills.insert(raw)
+                                            }
+                                        }) {
+                                            Text(StyleSelectionView.displayName(for: raw))
+                                                .font(Theme.Typography.subheadline)
+                                                .foregroundColor(isSelected ? .white : Theme.Colors.primaryText)
+                                                .padding(.horizontal, Theme.Spacing.sm)
+                                                .padding(.vertical, Theme.Spacing.xs)
+                                                .background(isSelected ? Theme.primaryColor : Theme.Colors.secondaryBackground)
+                                                .cornerRadius(20)
+                                        }
+                                        .buttonStyle(PlainTappableButtonStyle())
+                                        .disabled(!canSelect && !isSelected)
+                                    }
+                                }
+                                .padding(.vertical, Theme.Spacing.xs)
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.top, Theme.Spacing.md)
+
+                        HashtagCaptionField(
+                            label: "Caption",
+                            placeholder: "Add a caption (optional)",
+                            text: $caption,
+                            minLines: 3,
+                            maxLines: 6
+                        )
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.top, Theme.Spacing.md)
+                    }
+
+                    Color.clear.frame(height: 24)
                 }
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: 200)
-                .contentShape(Rectangle())
             }
-            .onChange(of: selectedItems) { _, newValue in
-                Task { await loadImages(from: newValue) }
-            }
-
-            if !selectedImages.isEmpty {
-                // Tagged products (shown after returning from Tag screen)
-                if !taggedProductItems.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Tagged products")
-                            .font(Theme.Typography.body)
-                            .fontWeight(.medium)
-                            .foregroundColor(Theme.Colors.primaryText)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                ForEach(taggedProductItems, id: \.id) { item in
-                                    taggedProductChip(item)
-                                }
-                            }
-                            .padding(.vertical, Theme.Spacing.xs)
-                        }
-                    }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.top, Theme.Spacing.md)
-                }
-
-                // Style pills: select up to 3
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Style tags")
-                        .font(Theme.Typography.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(Theme.Colors.secondaryText)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            ForEach(lookbookUploadStylePills, id: \.self) { raw in
-                                let isSelected = selectedStylePills.contains(raw)
-                                let canSelect = selectedStylePills.count < Self.maxStylePills || isSelected
-                                Button(action: {
-                                    if isSelected {
-                                        selectedStylePills.remove(raw)
-                                    } else if canSelect {
-                                        selectedStylePills.insert(raw)
-                                    }
-                                }) {
-                                    Text(StyleSelectionView.displayName(for: raw))
-                                        .font(Theme.Typography.subheadline)
-                                        .foregroundColor(isSelected ? .white : Theme.Colors.primaryText)
-                                        .padding(.horizontal, Theme.Spacing.sm)
-                                        .padding(.vertical, Theme.Spacing.xs)
-                                        .background(isSelected ? Theme.primaryColor : Theme.Colors.secondaryBackground)
-                                        .cornerRadius(20)
-                                }
-                                .buttonStyle(PlainTappableButtonStyle())
-                                .disabled(!canSelect && !isSelected)
-                            }
-                        }
-                        .padding(.vertical, Theme.Spacing.xs)
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.top, Theme.Spacing.md)
-
-                HashtagCaptionField(
-                    label: "Caption",
-                    placeholder: "Add a caption (optional)",
-                    text: $caption,
-                    minLines: 3,
-                    maxLines: 6
-                )
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.top, Theme.Spacing.md)
-            }
-
-            Spacer(minLength: 24)
+            .scrollDismissesKeyboard(.interactively)
 
             if case .failed(let msg) = uploadState {
                 Text(msg)

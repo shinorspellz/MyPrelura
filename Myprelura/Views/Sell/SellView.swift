@@ -640,7 +640,8 @@ extension SellView {
                     placeholder: "e.g. only worn a few times, true to size",
                     text: $description,
                     minLines: 6,
-                    maxLines: nil
+                    maxLines: nil,
+                    highlightHashtags: true
                 )
             }
             .padding(.horizontal, Theme.Spacing.md)

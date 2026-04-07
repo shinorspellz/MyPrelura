@@ -1,5 +1,32 @@
 import SwiftUI
 
+struct HostedWebArticleView: View {
+    let title: String
+    let urlString: String
+    @State private var isLoading = true
+
+    var body: some View {
+        Group {
+            if let url = URL(string: urlString) {
+                ZStack(alignment: .top) {
+                    WebView(url: url, isLoading: $isLoading)
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Theme.Colors.background)
+                    }
+                }
+            } else {
+                legalFallback(title: title, message: "Unable to load this page.")
+            }
+        }
+        .background(Theme.Colors.background)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+    }
+}
+
 struct TermsAndConditionsView: View {
     @State private var isLoading = true
     private var url: URL? { URL(string: Constants.termsAndConditionsURL) }

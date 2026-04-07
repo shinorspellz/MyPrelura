@@ -1,5 +1,25 @@
 import SwiftUI
 
+private enum PeopleListFilter: String, CaseIterable, Identifiable {
+    case all
+    case staffOnly
+    case superuserOnly
+    case verifiedOnly
+    case hasActiveListings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "Everyone"
+        case .staffOnly: return "Staff only"
+        case .superuserOnly: return "Superuser only"
+        case .verifiedOnly: return "Verified email"
+        case .hasActiveListings: return "Has active listings"
+        }
+    }
+}
+
 struct UserManagementView: View {
     var wrapsInNavigationStack: Bool = true
 
@@ -11,7 +31,24 @@ struct UserManagementView: View {
     @State private var errorMessage: String?
     @State private var page = 1
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var listFilter: PeopleListFilter = .all
+    @State private var showFilterSheet = false
     private let pageSize = 30
+
+    private var displayedRows: [UserAdminRow] {
+        switch listFilter {
+        case .all:
+            return rows
+        case .staffOnly:
+            return rows.filter { $0.isStaff == true }
+        case .superuserOnly:
+            return rows.filter { $0.isSuperuser == true }
+        case .verifiedOnly:
+            return rows.filter { $0.isVerified == true }
+        case .hasActiveListings:
+            return rows.filter { ($0.activeListings ?? 0) > 0 }
+        }
+    }
 
     var body: some View {
         Group {
@@ -64,7 +101,15 @@ struct UserManagementView: View {
                     }
                 }
             }
-            ForEach(rows) { u in
+            if listFilter != .all, !rows.isEmpty, displayedRows.isEmpty {
+                Section {
+                    Text("No people match this filter in the loaded results. Load more or choose “Everyone”.")
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .listRowBackground(Color.clear)
+                }
+            }
+            ForEach(displayedRows) { u in
                 NavigationLink {
                     UserDetailView(username: u.username ?? "", summary: u)
                 } label: {
@@ -122,6 +167,59 @@ struct UserManagementView: View {
         .navigationTitle("People")
         .navigationBarTitleDisplayMode(.inline)
         .adminNavigationChrome()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    HapticManager.selection()
+                    showFilterSheet = true
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(listFilter == .all ? Theme.Colors.primaryText : Theme.primaryColor)
+                }
+                .accessibilityLabel("Filter people")
+            }
+        }
+        .sheet(isPresented: $showFilterSheet) {
+            NavigationStack {
+                List {
+                    Section {
+                        Text("Applies to people already loaded. Use search and “Load more” to widen the list.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .listRowBackground(Color.clear)
+                    }
+                    Section("Show") {
+                        ForEach(PeopleListFilter.allCases) { option in
+                            Button {
+                                listFilter = option
+                                showFilterSheet = false
+                            } label: {
+                                HStack {
+                                    Text(option.title)
+                                        .foregroundStyle(Theme.Colors.primaryText)
+                                    Spacer()
+                                    if listFilter == option {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Theme.primaryColor)
+                                            .fontWeight(.semibold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Filter")
+                .navigationBarTitleDisplayMode(.inline)
+                .adminNavigationChrome()
+                .scrollContentBackground(.hidden)
+                .background(Theme.Colors.background)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showFilterSheet = false }
+                    }
+                }
+            }
+        }
         .searchable(text: $searchText, prompt: "Search username or profile")
         .onChange(of: searchText) { _, _ in
             searchDebounceTask?.cancel()

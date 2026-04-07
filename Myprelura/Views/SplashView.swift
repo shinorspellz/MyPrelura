@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Splash screen: black background with centered PRELURA SVG logo (primary colour); no glass container.
+/// Splash: black background, WEARHOUSE wordmark + small **Pro** (staff app).
 struct SplashView: View {
     var onFinish: () -> Void
 
@@ -31,14 +31,16 @@ struct SplashView: View {
 
             VStack(spacing: 0) {
                 Spacer()
-                Image("SplashLogo")
-                    .resizable()
-                    .renderingMode(.template)
-                    .foregroundColor(Theme.primaryColor)
-                    .scaledToFit()
-                    .frame(maxWidth: 280)
-                    .scaleEffect(phase == .hidden ? 0.92 : (phase == .exiting ? 1.04 : 1.0))
-                    .opacity(phase == .hidden ? 0 : (phase == .exiting ? 0 : 1))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    WearhouseWordmarkView(style: .splash)
+                    Text("Pro")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.primaryColor.opacity(0.92))
+                        .padding(.bottom, 2)
+                }
+                .frame(maxWidth: 320)
+                .scaleEffect(phase == .hidden ? 0.92 : (phase == .exiting ? 1.04 : 1.0))
+                .opacity(phase == .hidden ? 0 : (phase == .exiting ? 0 : 1))
                 Spacer()
                 Text("by Voltis Labs")
                     .font(.system(size: 12, weight: .regular))

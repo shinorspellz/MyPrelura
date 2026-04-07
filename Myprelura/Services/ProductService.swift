@@ -1084,8 +1084,6 @@ class ProductService: ObservableObject {
             return "WOMEN"
         case "Men":
             return "MEN"
-        case "Kids":
-            return "KIDS"
         case "Toddlers":
             return "TODDLERS"
         case "Boys":

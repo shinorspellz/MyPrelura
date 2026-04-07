@@ -594,13 +594,25 @@ struct ItemDetailView: View {
     // MARK: - Description Section (content only, no title or bullet)
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            descriptionBody
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.top, Theme.Spacing.lg / 2)
-                .padding(.bottom, Theme.Spacing.lg)
-                .overlay(ContentDivider(), alignment: .bottom)
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                descriptionBody
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.top, Theme.Spacing.lg / 2)
+                hashtagChipsIfNeeded
+            }
+            .padding(.bottom, Theme.Spacing.lg)
+            .overlay(ContentDivider(), alignment: .bottom)
         }
         .background(Theme.Colors.background)
+    }
+
+    @ViewBuilder
+    private var hashtagChipsIfNeeded: some View {
+        let tags = HashtagTextSupport.uniqueHashtags(in: effectiveItem.description)
+        if !tags.isEmpty {
+            hashtagChipsRow(tags: tags)
+                .padding(.horizontal, Theme.Spacing.md)
+        }
     }
     
     private var descriptionBody: some View {
@@ -616,7 +628,7 @@ struct ItemDetailView: View {
 
     /// Renders a string with hashtags (#word) in primary colour.
     private func textWithHashtags(_ string: String) -> Text {
-        let segments = Self.parseHashtagSegments(string)
+        let segments = HashtagTextSupport.parseHashtagSegments(string)
         return segments.reduce(Text(verbatim: "")) { acc, seg in
             acc + Text(seg.text)
                 .font(Theme.Typography.body)
@@ -624,26 +636,24 @@ struct ItemDetailView: View {
         }
     }
 
-    private static func parseHashtagSegments(_ string: String) -> [(text: String, isHashtag: Bool)] {
-        var result: [(String, Bool)] = []
-        let pattern = "#[\\w]+"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return [(string, false)]
-        }
-        let range = NSRange(string.startIndex..., in: string)
-        var lastEnd = string.startIndex
-        regex.enumerateMatches(in: string, options: [], range: range) { match, _, _ in
-            guard let match = match, let range = Range(match.range, in: string) else { return }
-            if lastEnd < range.lowerBound {
-                result.append((String(string[lastEnd..<range.lowerBound]), false))
+    @ViewBuilder
+    private func hashtagChipsRow(tags: [String]) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 72), spacing: 8)],
+            alignment: .leading,
+            spacing: 8
+        ) {
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(Theme.Typography.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Theme.primaryColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.primaryColor.opacity(0.18))
+                    .clipShape(Capsule())
             }
-            result.append((String(string[range]), true))
-            lastEnd = range.upperBound
         }
-        if lastEnd < string.endIndex {
-            result.append((String(string[lastEnd...]), false))
-        }
-        return result.isEmpty ? [(string, false)] : result
     }
     
     // MARK: - Product Attributes
@@ -942,8 +952,23 @@ struct ProductOptionsSheet: View {
             .padding(.horizontal, Theme.Spacing.md)
     }
 
+    private var sheetHeightDetent: CGFloat {
+        let header: CGFloat = 108
+        let row: CGFloat = 54
+        let contentVerticalPadding: CGFloat = 32
+        let rows = isCurrentUser ? 5 : 3
+        let dividers: CGFloat = CGFloat(max(0, rows - 1)) * 0.5
+        return header + contentVerticalPadding + CGFloat(rows) * row + dividers + 12
+    }
+
     var body: some View {
-        OptionsSheet(title: L10n.string("Options"), onDismiss: onDismiss, useCustomCornerRadius: false) {
+        OptionsSheet(
+            title: L10n.string("Options"),
+            onDismiss: onDismiss,
+            detents: [.height(sheetHeightDetent)],
+            useCustomCornerRadius: false,
+            fillsAvailableVerticalSpace: false
+        ) {
             VStack(alignment: .leading, spacing: 0) {
                 if isCurrentUser {
                     MenuItemRow(title: L10n.string("Edit listing"), icon: "square.and.pencil", action: { onEdit() }, iconAndSubtitleColor: Theme.Colors.secondaryText)

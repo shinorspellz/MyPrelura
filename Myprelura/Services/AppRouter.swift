@@ -34,7 +34,7 @@ final class AppRouter: ObservableObject {
     /// Myprelura staff: local notification tap to open Console (`myprelura_open_console` / `page: STAFF_CONSOLE`).
     @Published var pendingStaffConsoleOpen = false
 
-    /// Hosts that serve `/item/{slug}` universal links for this app. Keep in sync with entitlements **Associated Domains** and the site’s `apple-app-site-association`.
+    /// Marketing / public-web hosts that may serve `/item/*` and optional `/{username}` profile paths.
     private static func isPreluraItemUniversalLinkHost(_ host: String) -> Bool {
         switch host.lowercased() {
         case "wearhouse.co.uk", "www.wearhouse.co.uk",
@@ -43,6 +43,29 @@ final class AppRouter: ObservableObject {
         default:
             return false
         }
+    }
+
+    /// API host where Django serves `apple-app-site-association` plus `/app/u/*` and `/join*`.
+    private static let apiUniversalLinkHosts: Set<String> = ["prelura.voltislabs.uk", "www.prelura.voltislabs.uk"]
+
+    private static func isHttpsUniversalLinkHost(_ host: String) -> Bool {
+        let h = host.lowercased()
+        return isPreluraItemUniversalLinkHost(h) || apiUniversalLinkHosts.contains(h)
+    }
+
+    private static let reservedProfilePathSegments: Set<String> = [
+        "item", "join", "app", "terms", "privacy", "login", "sell", "cart", "checkout",
+        "discover", "api", "graphql", "admin", "static", "assets", "_next", "help",
+        "support", "about", "contact", "blog", "legal", "cookies", "sitemap", "robots.txt",
+        "download", "invite", "internal", "ws", "media", "register", "signin", "signup",
+    ]
+
+    private static func looksLikePublicUsernameSegment(_ raw: String) -> Bool {
+        let lower = raw.lowercased()
+        guard !reservedProfilePathSegments.contains(lower) else { return false }
+        let decoded = (raw.removingPercentEncoding ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (2 ... 40).contains(decoded.count) else { return false }
+        return decoded.range(of: "^[a-zA-Z0-9_]+$", options: .regularExpression) != nil
     }
 
     /// Pops the pending inbox navigation if present (call from main thread / `MainActor`).
@@ -59,7 +82,8 @@ final class AppRouter: ObservableObject {
 
         if scheme == "http" || scheme == "https" {
             let host = (url.host ?? "").lowercased()
-            guard Self.isPreluraItemUniversalLinkHost(host) else { return }
+            guard Self.isHttpsUniversalLinkHost(host) else { return }
+            let isApiHost = Self.apiUniversalLinkHosts.contains(host)
             let parts = url.path.split(separator: "/").map(String.init).filter { !$0.isEmpty }
             if parts.count >= 2, parts[0].lowercased() == "item" {
                 let raw = parts[1]
@@ -67,6 +91,18 @@ final class AppRouter: ObservableObject {
                 if !slug.isEmpty {
                     dest = .product(publicSlug: slug)
                 }
+            } else if parts.count >= 3, parts[0].lowercased() == "app", parts[1].lowercased() == "u" {
+                let raw = parts[2]
+                let username = (raw.removingPercentEncoding ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.looksLikePublicUsernameSegment(raw) {
+                    dest = .user(username: username)
+                }
+            } else if parts.count >= 1, parts[0].lowercased() == "join" {
+                dest = nil
+            } else if !isApiHost, parts.count == 1, Self.looksLikePublicUsernameSegment(parts[0]) {
+                let raw = parts[0]
+                let username = (raw.removingPercentEncoding ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
+                dest = .user(username: username)
             }
         } else {
             guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -93,6 +129,8 @@ final class AppRouter: ObservableObject {
                     let isOrder = (components.queryItems?.first(where: { $0.name == "is_order" })?.value ?? "false").lowercased() == "true"
                     dest = .conversation(conversationId: String(id), username: username, isOffer: isOffer, isOrder: isOrder)
                 }
+            case "join", "invite":
+                break
             default:
                 break
             }

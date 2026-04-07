@@ -49,7 +49,7 @@ final class AISearchService {
     ]
     
     /// Parent categories (feed filter)
-    static let parentCategories: [String] = ["All", "Women", "Men", "Kids", "Toddlers", "Boys", "Girls"]
+    static let parentCategories: [String] = ["All", "Women", "Men", "Boys", "Girls", "Toddlers"]
     
     /// Subcategories (from Category model) for keyword matching
     static let subCategories: [String] = [
@@ -352,7 +352,7 @@ final class AISearchService {
         case "man's", "men's", "mens", "men": return "Men"
         case "boy's", "boys'", "boys": return "Boys"
         case "girl's", "girls'", "girls": return "Girls"
-        case "kid's", "kids'", "kids": return "Kids"
+        case "kid's", "kids'", "kids": return nil
         case "toddler's", "toddlers'", "toddlers": return "Toddlers"
         default: return nil
         }

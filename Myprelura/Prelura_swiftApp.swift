@@ -232,6 +232,7 @@ struct ContentView: View {
 struct MainTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var appRouter: AppRouter
+    @StateObject private var bellUnreadStore = BellUnreadStore()
     @StateObject private var tabCoordinator = TabCoordinator()
     @StateObject private var discoverViewModel = DiscoverViewModel(authService: nil)
     @StateObject private var inboxViewModel = InboxViewModel()
@@ -288,10 +289,12 @@ struct MainTabView: View {
         }
         .accentColor(Theme.primaryColor)
         .environmentObject(shopAllBagStore)
+        .environmentObject(bellUnreadStore)
         .onAppear {
             applyTabBarAppearance()
             discoverViewModel.updateAuthToken(authService.authToken)
             inboxViewModel.updateAuthToken(authService.authToken)
+            bellUnreadStore.scheduleRefresh(authService: authService)
             if authService.isAuthenticated {
                 if discoverViewModel.discoverItems.isEmpty { discoverViewModel.refresh() }
                 inboxViewModel.prefetch()
@@ -302,10 +305,14 @@ struct MainTabView: View {
         .onChange(of: authService.authToken) { _, token in
             discoverViewModel.updateAuthToken(token)
             inboxViewModel.updateAuthToken(token)
+            bellUnreadStore.scheduleRefresh(authService: authService)
             if authService.isAuthenticated {
                 if discoverViewModel.discoverItems.isEmpty { discoverViewModel.refresh() }
                 inboxViewModel.prefetch()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .preluraInAppNotificationsDidChange)) { _ in
+            bellUnreadStore.scheduleRefresh(authService: authService)
         }
         .onAppear { openInboxChatFromPendingRouterIfNeeded() }
         .onChange(of: appRouter.pendingInboxChat) { _, _ in openInboxChatFromPendingRouterIfNeeded() }

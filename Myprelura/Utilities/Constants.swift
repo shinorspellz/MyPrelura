@@ -15,14 +15,28 @@ struct Constants {
     /// Django `ConversationsConsumer`: inbox list sync + typing for threads the user is in (not per-room chat).
     static let conversationsWebSocketURL = "wss://prelura.voltislabs.uk/ws/conversations/"
     
-    // Legal & info URLs (same domain as API)
-    static let termsAndConditionsURL = "https://prelura.voltislabs.uk/terms/"
-    static let privacyPolicyURL = "https://prelura.voltislabs.uk/privacy/"
-    static let acknowledgementsURL = "https://prelura.voltislabs.uk/acknowledgements/"
+    /// Consumer marketing site (Wearhouse): legal + help HTML. Staff app loads the same public pages for parity with the shopper app.
+    static let publicWebsiteBaseURL = "https://mywearhouse.co.uk"
+
+    static var termsAndConditionsURL: String { "\(publicWebsiteBaseURL)/terms/" }
+    static var privacyPolicyURL: String { "\(publicWebsiteBaseURL)/privacy/" }
+    static var acknowledgementsURL: String { "\(publicWebsiteBaseURL)/acknowledgements/" }
     static let hmrcReportingURL = "https://www.gov.uk/government/organisations/hm-revenue-customs/contact/report-fraud-or-an-untrustworthy-website"
+
+    static var helpHowToUseWearhouseURL: String { "\(publicWebsiteBaseURL)/help/how-to-use" }
+    static var helpArticleCancelOrderURL: String { "\(publicWebsiteBaseURL)/help/cancel-order" }
+    static var helpArticleRefundsURL: String { "\(publicWebsiteBaseURL)/help/refunds" }
+    static var helpArticleDeliveryURL: String { "\(publicWebsiteBaseURL)/help/delivery" }
+    static var helpArticleOrderShippedURL: String { "\(publicWebsiteBaseURL)/help/order-shipped" }
+    static var helpArticleCollectionPointURL: String { "\(publicWebsiteBaseURL)/help/collection-point" }
+    static var helpArticleDeliveredNotReceivedURL: String { "\(publicWebsiteBaseURL)/help/delivered-not-received" }
+    static var helpArticleVacationModeURL: String { "\(publicWebsiteBaseURL)/help/vacation-mode" }
+    static var helpArticleTrustedSellerURL: String { "\(publicWebsiteBaseURL)/help/trusted-seller" }
     
+    /// Django-served universal link base (`/.well-known/...`, `/app/u/`, `/join/`).
+    static let universalLinksAPIBaseURL = "https://prelura.voltislabs.uk"
     /// Used when inviting contacts (share sheet / SMS).
-    static let inviteToPreluraURL = "https://prelura.voltislabs.uk"
+    static let inviteToPreluraURL = "https://prelura.voltislabs.uk/join/"
     /// Public web URLs for sharing listings and universal links (`/item/{slug}`: listing code or legacy numeric id). Must match **Associated Domains** / `apple-app-site-association` on this host (production: wearhouse.co.uk).
     static let publicWebItemLinkBaseURL = "https://wearhouse.co.uk"
     
@@ -43,7 +57,7 @@ struct Constants {
         let u = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !u.isEmpty else { return nil }
         let enc = u.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? u
-        return URL(string: "\(publicWebItemLinkBaseURL)/\(enc)")
+        return URL(string: "\(universalLinksAPIBaseURL)/app/u/\(enc)/")
     }
 
     static func publicProductURL(productId: Int, listingCode: String?) -> URL? {

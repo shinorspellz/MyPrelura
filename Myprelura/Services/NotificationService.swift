@@ -213,6 +213,19 @@ final class NotificationService {
         }
         return (parsed, total)
     }
+
+    /// Unread notifications that belong on the home bell (excludes fresh chat; matches `shouldShowOnNotificationsPage`).
+    func countUnreadBellEligibleNotifications(pageCount: Int = 15, maxPages: Int = 8) async throws -> Int {
+        var count = 0
+        for page in 1...maxPages {
+            let (batch, _) = try await getNotifications(pageCount: pageCount, pageNumber: page)
+            for n in batch where n.shouldCountTowardBellBadge {
+                count += 1
+            }
+            if batch.count < pageCount { break }
+        }
+        return count
+    }
     
     /// Mark notifications as read. Matches Flutter readNotification(notificationIds).
     func readNotifications(notificationIds: [Int]) async throws -> Bool {

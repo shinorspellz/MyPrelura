@@ -86,12 +86,41 @@ enum PreluraAdminAPI {
           allReports {
             id publicId reportType reason context imagesUrl status dateCreated updatedAt
             reportedByUsername accountReportedUsername productId productName
-            supportConversationId conversationId
+            supportConversationId conversationId orderId sellerSupportConversationId
           }
         }
         """
         let env: ReportsEnvelope = try await client.execute(query: q, responseType: ReportsEnvelope.self)
         return env.allReports ?? []
+    }
+
+    struct DeleteProductEnvelope: Decodable {
+        let deleteProduct: DeleteProductStaffResult?
+    }
+
+    struct DeleteProductStaffResult: Decodable {
+        let success: Bool?
+        let message: String?
+    }
+
+    static func deleteProduct(client: GraphQLClient, productId: Int) async throws {
+        let q = """
+        mutation DeleteProductStaff($productId: Int!) {
+          deleteProduct(productId: $productId) {
+            success
+            message
+          }
+        }
+        """
+        let env: DeleteProductEnvelope = try await client.execute(
+            query: q,
+            variables: ["productId": productId],
+            responseType: DeleteProductEnvelope.self
+        )
+        guard env.deleteProduct?.success == true else {
+            let msg = env.deleteProduct?.message ?? "Failed to delete listing"
+            throw GraphQLError.graphQLErrors([GraphQLErrorResponse(message: msg)])
+        }
     }
 
     // MARK: - Users
@@ -157,7 +186,7 @@ enum PreluraAdminAPI {
         let q = """
         query UserShop($username: String!, $pageCount: Int!, $pageNumber: Int!) {
           userProducts(username: $username, pageCount: $pageCount, pageNumber: $pageNumber) {
-            id name listingCode status price imagesUrl seller { username }
+            id name listingCode status createdAt price imagesUrl seller { username }
           }
         }
         """
@@ -179,25 +208,42 @@ enum PreluraAdminAPI {
     }
 
     /// Paginated slice. Pass `statusFilter: nil` for default **ACTIVE** marketplace slice (same as shoppers). Staff may pass **SOLD** for moderation.
+    /// `sort`: `NEWEST` | `PRICE_ASC` | `PRICE_DESC` (GraphQL `SortEnum`). Defaults to **NEWEST** for stable staff ordering.
     static func allProductsPage(
         client: GraphQLClient,
         page: Int,
         pageSize: Int,
-        statusFilter: String? = nil
+        statusFilter: String? = nil,
+        sort: String = "NEWEST",
+        search: String? = nil,
+        minPrice: Double? = nil,
+        maxPrice: Double? = nil
     ) async throws -> (rows: [ProductBrowseRow], hasMore: Bool) {
         let q = """
-        query Products($pageCount: Int!, $pageNumber: Int!, $filters: ProductFiltersInput) {
-          allProducts(pageCount: $pageCount, pageNumber: $pageNumber, filters: $filters) {
-            id name listingCode status price imagesUrl seller { username }
+        query Products($pageCount: Int!, $pageNumber: Int!, $filters: ProductFiltersInput, $sort: SortEnum, $search: String) {
+          allProducts(pageCount: $pageCount, pageNumber: $pageNumber, filters: $filters, sort: $sort, search: $search) {
+            id name listingCode status createdAt price imagesUrl seller { username }
           }
         }
         """
-        var vars: [String: Any] = ["pageCount": pageSize, "pageNumber": page]
+        var vars: [String: Any] = [
+            "pageCount": pageSize,
+            "pageNumber": page,
+            "sort": sort,
+        ]
+        var filters: [String: Any] = [:]
         if let statusFilter {
-            vars["filters"] = ["status": statusFilter]
-        } else {
-            vars["filters"] = NSNull()
+            filters["status"] = statusFilter
         }
+        if let minPrice {
+            filters["minPrice"] = minPrice
+        }
+        if let maxPrice {
+            filters["maxPrice"] = maxPrice
+        }
+        vars["filters"] = filters.isEmpty ? NSNull() : filters
+        let trimmedSearch = search?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        vars["search"] = trimmedSearch.isEmpty ? NSNull() : trimmedSearch
         let env: ProductsPageEnvelope = try await client.execute(query: q, variables: vars, responseType: ProductsPageEnvelope.self)
         let rows = env.allProducts ?? []
         let hasMore = rows.count >= pageSize
@@ -299,6 +345,97 @@ enum PreluraAdminAPI {
         return env.flagUser ?? FlagUserResult(success: false, message: nil)
     }
 
+    // MARK: - User moderation (staff dashboard)
+
+    struct AdminUserModerationEnvelope: Decodable {
+        let adminSuspendUser: AdminUserModerationResult?
+    }
+
+    struct AdminUserBanEnvelope: Decodable {
+        let adminBanUser: AdminUserModerationResult?
+    }
+
+    struct AdminUserModerationResult: Decodable {
+        let success: Bool?
+        let message: String?
+    }
+
+    static func adminSuspendUser(client: GraphQLClient, userId: Int) async throws -> AdminUserModerationResult {
+        let q = """
+        mutation AdminSuspendUser($userId: Int!) {
+          adminSuspendUser(userId: $userId) {
+            success
+            message
+          }
+        }
+        """
+        let env: AdminUserModerationEnvelope = try await client.execute(
+            query: q,
+            variables: ["userId": userId],
+            responseType: AdminUserModerationEnvelope.self
+        )
+        return env.adminSuspendUser ?? AdminUserModerationResult(success: false, message: nil)
+    }
+
+    static func adminBanUser(client: GraphQLClient, userId: Int) async throws -> AdminUserModerationResult {
+        let q = """
+        mutation AdminBanUser($userId: Int!) {
+          adminBanUser(userId: $userId) {
+            success
+            message
+          }
+        }
+        """
+        let env: AdminUserBanEnvelope = try await client.execute(
+            query: q,
+            variables: ["userId": userId],
+            responseType: AdminUserBanEnvelope.self
+        )
+        return env.adminBanUser ?? AdminUserModerationResult(success: false, message: nil)
+    }
+
+    struct AdminUserUnsuspendEnvelope: Decodable {
+        let adminUnsuspendUser: AdminUserModerationResult?
+    }
+
+    struct AdminUserUnbanEnvelope: Decodable {
+        let adminUnbanUser: AdminUserModerationResult?
+    }
+
+    static func adminUnsuspendUser(client: GraphQLClient, userId: Int) async throws -> AdminUserModerationResult {
+        let q = """
+        mutation AdminUnsuspendUser($userId: Int!) {
+          adminUnsuspendUser(userId: $userId) {
+            success
+            message
+          }
+        }
+        """
+        let env: AdminUserUnsuspendEnvelope = try await client.execute(
+            query: q,
+            variables: ["userId": userId],
+            responseType: AdminUserUnsuspendEnvelope.self
+        )
+        return env.adminUnsuspendUser ?? AdminUserModerationResult(success: false, message: nil)
+    }
+
+    static func adminUnbanUser(client: GraphQLClient, userId: Int) async throws -> AdminUserModerationResult {
+        let q = """
+        mutation AdminUnbanUser($userId: Int!) {
+          adminUnbanUser(userId: $userId) {
+            success
+            message
+          }
+        }
+        """
+        let env: AdminUserUnbanEnvelope = try await client.execute(
+            query: q,
+            variables: ["userId": userId],
+            responseType: AdminUserUnbanEnvelope.self
+        )
+        return env.adminUnbanUser ?? AdminUserModerationResult(success: false, message: nil)
+    }
+
     // MARK: - Chat (same `conversation` query as consumer; staff may read system/order threads)
 
     struct ConversationMessagesEnvelope: Decodable {
@@ -332,5 +469,52 @@ enum PreluraAdminAPI {
             responseType: ConversationMessagesEnvelope.self
         )
         return env.conversation ?? []
+    }
+
+    // MARK: - Discover featured (consumer strip; staff sets order, max 20)
+
+    struct DiscoverFeaturedEnvelope: Decodable {
+        let discoverFeaturedProducts: [ProductBrowseRow]?
+    }
+
+    static func discoverFeaturedProductRows(client: GraphQLClient) async throws -> [ProductBrowseRow] {
+        let q = """
+        query DiscoverFeaturedAdmin {
+          discoverFeaturedProducts {
+            id name listingCode status createdAt price imagesUrl seller { username }
+          }
+        }
+        """
+        let env: DiscoverFeaturedEnvelope = try await client.execute(query: q, responseType: DiscoverFeaturedEnvelope.self)
+        return env.discoverFeaturedProducts ?? []
+    }
+
+    struct SetDiscoverFeaturedEnvelope: Decodable {
+        let setDiscoverFeaturedProducts: SetDiscoverFeaturedPayload?
+    }
+
+    struct SetDiscoverFeaturedPayload: Decodable {
+        let success: Bool?
+        let message: String?
+    }
+
+    static func setDiscoverFeaturedProducts(client: GraphQLClient, productIds: [Int]) async throws {
+        let q = """
+        mutation SetDiscoverFeatured($productIds: [Int!]!) {
+          setDiscoverFeaturedProducts(productIds: $productIds) {
+            success
+            message
+          }
+        }
+        """
+        let env: SetDiscoverFeaturedEnvelope = try await client.execute(
+            query: q,
+            variables: ["productIds": productIds],
+            responseType: SetDiscoverFeaturedEnvelope.self
+        )
+        guard env.setDiscoverFeaturedProducts?.success == true else {
+            let msg = env.setDiscoverFeaturedProducts?.message ?? "Failed to update featured products"
+            throw GraphQLError.graphQLErrors([GraphQLErrorResponse(message: msg)])
+        }
     }
 }

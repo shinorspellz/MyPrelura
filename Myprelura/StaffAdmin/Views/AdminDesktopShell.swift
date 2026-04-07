@@ -51,7 +51,7 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
     }
 
     static var liveOps: [AdminSidebarSection] {
-        [.listings, .users, .messages, .reports, .home]
+        [.home, .listings, .users, .messages, .reports]
     }
 
     static var roadmap: [AdminSidebarSection] {
@@ -60,7 +60,7 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 struct AdminDesktopShell: View {
-    @State private var selection: AdminSidebarSection = .listings
+    @State private var selection: AdminSidebarSection = .home
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {

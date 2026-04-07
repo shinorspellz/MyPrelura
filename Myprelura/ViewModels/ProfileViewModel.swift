@@ -72,10 +72,11 @@ class ProfileViewModel: ObservableObject {
         }
         
         do {
-            // Load user profile and products in parallel for faster display
+            // `viewMe` is allowed when suspended/banned; `userProducts` is not — do not fail the whole load.
             async let userTask = userService.getUser()
             async let productsTask = userService.getUserProducts()
-            let (fetchedUser, products) = try await (userTask, productsTask)
+            let fetchedUser = try await userTask
+            let products = (try? await productsTask) ?? []
             await MainActor.run {
                 self.user = fetchedUser
                 self.userItems = products

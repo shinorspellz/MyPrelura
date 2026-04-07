@@ -17,6 +17,9 @@ final class AdminSession {
 
     var isSignedIn: Bool { accessToken != nil }
 
+    /// `viewMe.isSuperuser` — only these accounts may run scheduled Console health notifications (Myprelura-only).
+    var isSuperuser: Bool { accessLevel == .admin }
+
     var graphQL: GraphQLClient { client }
 
     init() {

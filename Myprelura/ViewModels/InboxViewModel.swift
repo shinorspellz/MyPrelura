@@ -88,7 +88,7 @@ class InboxViewModel: ObservableObject {
     }
 
     /// Load conversations from API. Merges in existing conversations not in API response; applies optional preview for one conversation.
-    func loadConversationsAsync(preview: (id: String, text: String, date: Date)?) async {
+    func loadConversationsAsync(preview: (id: String, text: String, date: Date)?, currentUsername: String? = nil) async {
         let hadConversations = !conversations.isEmpty || !archivedConversations.isEmpty
         let existingToMerge = conversations
         if !hadConversations {
@@ -107,11 +107,26 @@ class InboxViewModel: ObservableObject {
             }
             // Counter-offers must not create duplicate chats: backend may return two conversations for same recipient+product; keep one per (recipient, product set) with latest activity.
             list = Self.deduplicateConversations(list)
+            for idx in list.indices {
+                let c = list[idx]
+                guard let prev = existingToMerge.first(where: { $0.id == c.id }) else { continue }
+                guard Self.shouldPreferExistingLastLine(prev: prev, api: c, currentUsername: currentUsername) else { continue }
+                list[idx] = Conversation(
+                    id: c.id,
+                    recipient: c.recipient,
+                    lastMessage: prev.lastMessage,
+                    lastMessageSenderUsername: prev.lastMessageSenderUsername,
+                    lastMessageTime: prev.lastMessageTime,
+                    unreadCount: c.unreadCount,
+                    offer: c.offer,
+                    order: c.order,
+                    offerHistory: c.offerHistory
+                )
+            }
             if let preview = preview, let idx = list.firstIndex(where: { $0.id == preview.id }) {
                 let c = list[idx]
                 let apiTime = c.lastMessageTime ?? .distantPast
-                // Prefer the newer of API vs local (leaving chat) so the row updates immediately and isn’t stuck on an older offer row.
-                if preview.date >= apiTime {
+                if preview.date.addingTimeInterval(120) >= apiTime {
                     list[idx] = Conversation(
                         id: c.id,
                         recipient: c.recipient,
@@ -244,6 +259,41 @@ class InboxViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private static func normalizedInboxPreview(_ c: Conversation, currentUsername: String?) -> String {
+        ChatRowView.previewText(for: c.lastMessage, conversation: c, currentUsername: currentUsername) ?? ""
+    }
+
+    private static func looksLikeOfferOnlySubtitle(_ text: String) -> Bool {
+        let t = text.lowercased()
+        return t.contains("offered") || t.contains("sent an offer") || t == "offer received"
+    }
+
+    private static func looksLikePostSaleSubtitle(_ text: String) -> Bool {
+        let t = text.lowercased()
+        if t.contains("payment successful") { return true }
+        if t.contains("order confirmed") { return true }
+        if t.contains("order update") { return true }
+        if t.contains("order on hold") { return true }
+        if t.contains("shipped") { return true }
+        if t.contains("completed") { return true }
+        if t.contains("you made a sale") { return true }
+        if t.contains("cancellation") { return true }
+        return false
+    }
+
+    private static func shouldPreferExistingLastLine(prev: Conversation, api: Conversation, currentUsername: String?) -> Bool {
+        let pt = prev.lastMessageTime ?? .distantPast
+        let at = api.lastMessageTime ?? .distantPast
+        let prevLabel = normalizedInboxPreview(prev, currentUsername: currentUsername)
+        let apiLabel = normalizedInboxPreview(api, currentUsername: currentUsername)
+        if pt > at { return true }
+        if looksLikePostSaleSubtitle(prevLabel), looksLikeOfferOnlySubtitle(apiLabel) {
+            if pt.addingTimeInterval(180) >= at { return true }
+            if abs(pt.timeIntervalSince(at)) <= 3 { return true }
+        }
+        return false
     }
 
     /// Deduplicate so counter-offers don't show as a second chat. For offer conversations: same recipient + same offer product set = one conversation (keep latest by lastMessageTime). Non-offer conversations are left as-is.

@@ -4,6 +4,11 @@ struct StaffMainTabView: View {
     var body: some View {
         TabView {
             NavigationStack {
+                StaffDashboardView(wrapsInNavigationStack: false)
+            }
+            .tabItem { Label("Home", systemImage: "house.fill") }
+
+            NavigationStack {
                 ListingsModerationView(wrapsInNavigationStack: false)
             }
             .tabItem { Label("Listings", systemImage: "bag") }
@@ -22,11 +27,6 @@ struct StaffMainTabView: View {
                 ReportsQueueView(wrapsInNavigationStack: false)
             }
             .tabItem { Label("Reports", systemImage: "exclamationmark.triangle") }
-
-            NavigationStack {
-                StaffDashboardView(wrapsInNavigationStack: false)
-            }
-            .tabItem { Label("Home", systemImage: "house.fill") }
         }
         .tint(Theme.primaryColor)
         .adminTabBarChrome()

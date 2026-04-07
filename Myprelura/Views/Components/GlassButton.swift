@@ -95,3 +95,51 @@ struct GlassIconView: View {
             .modifier(GlassIconCircleStyle(size: size))
     }
 }
+
+/// Glass circle + neutral bell; only a small dot shows state (shopper: red unread; Console: primary when monitor on).
+struct NotificationToolbarBellVisual: View {
+    private enum Kind {
+        case shopperUnread(Bool)
+        case consoleMonitorOn(Bool)
+    }
+
+    private let kind: Kind
+
+    init(emphasized: Bool) {
+        self.kind = .consoleMonitorOn(emphasized)
+    }
+
+    init(hasUnread: Bool) {
+        self.kind = .shopperUnread(hasUnread)
+    }
+
+    private var showDot: Bool {
+        switch kind {
+        case .shopperUnread(let u): return u
+        case .consoleMonitorOn(let on): return on
+        }
+    }
+
+    private var dotColor: Color {
+        switch kind {
+        case .shopperUnread: return Color.red
+        case .consoleMonitorOn: return Theme.primaryColor
+        }
+    }
+
+    var body: some View {
+        Image(systemName: "bell")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(Theme.Colors.primaryText)
+            .modifier(GlassIconCircleStyle(size: 44))
+            .overlay(alignment: .topTrailing) {
+                if showDot {
+                    Circle()
+                        .fill(dotColor)
+                        .frame(width: 10, height: 10)
+                        .offset(x: 4, y: -4)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}

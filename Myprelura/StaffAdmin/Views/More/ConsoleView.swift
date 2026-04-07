@@ -109,8 +109,9 @@ struct ConsoleView: View {
                 Button {
                     showBackgroundNotificationsSheet = true
                 } label: {
-                    Image(systemName: ConsoleHealthBackgroundMonitor.shared.isEnabled ? "bell.badge.fill" : "bell.badge")
-                        .foregroundStyle(ConsoleHealthBackgroundMonitor.shared.isEnabled ? Theme.primaryColor : Theme.Colors.primaryText)
+                    NotificationToolbarBellVisual(
+                        emphasized: ConsoleHealthBackgroundMonitor.shared.isEnabled
+                    )
                 }
                 .accessibilityLabel("Background checks and notifications")
             }

@@ -9,6 +9,7 @@ struct OptionsSheet<Content: View>: View {
     var detents: [PresentationDetent]
     /// When false, uses system default sheet corner radius (e.g. product Options modal).
     var useCustomCornerRadius: Bool = true
+    var fillsAvailableVerticalSpace: Bool = true
     @ViewBuilder let content: () -> Content
 
     @State private var selectedDetent: PresentationDetent
@@ -21,12 +22,14 @@ struct OptionsSheet<Content: View>: View {
         /// Slightly above half-height so header + list are not cramped; user can still drag to `.large`.
         detents: [PresentationDetent] = [.fraction(0.58), .large],
         useCustomCornerRadius: Bool = true,
+        fillsAvailableVerticalSpace: Bool = true,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.onDismiss = onDismiss
         self.detents = detents
         self.useCustomCornerRadius = useCustomCornerRadius
+        self.fillsAvailableVerticalSpace = fillsAvailableVerticalSpace
         self.content = content
         _selectedDetent = State(initialValue: detents.first ?? .fraction(0.58))
     }
@@ -66,7 +69,9 @@ struct OptionsSheet<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 .layoutPriority(0)
 
-            Spacer(minLength: 0)
+            if fillsAvailableVerticalSpace {
+                Spacer(minLength: 0)
+            }
         }
         .padding(.top, Theme.Spacing.sm)
         .background(sheetBackground)

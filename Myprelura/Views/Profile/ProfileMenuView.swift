@@ -248,26 +248,78 @@ struct AboutPreluraMenuView: View {
     }
 }
 
-// MARK: - Help Centre (Flutter HelpCentre). Search, FAQ list, topics list, Start conversation → HelpChatView.
+// MARK: - Help Centre — articles on `Constants.publicWebsiteBaseURL`; Start conversation → AnnChatView.
 struct HelpCentreView: View {
     @State private var searchText: String = ""
 
-    private var faqTitles: [String] {
+    private struct HelpArticle: Hashable {
+        let title: String
+        let urlString: String
+        let icon: String
+    }
+
+    private var faqArticles: [HelpArticle] {
         [
-            L10n.string("How can I cancel an existing order"),
-            L10n.string("How long does a refund normally take?"),
-            L10n.string("When will I receive my item?"),
-            L10n.string("How will I know if my order has been shipped?")
+            HelpArticle(
+                title: L10n.string("How can I cancel an existing order"),
+                urlString: Constants.helpArticleCancelOrderURL,
+                icon: "questionmark.circle"
+            ),
+            HelpArticle(
+                title: L10n.string("How long does a refund normally take?"),
+                urlString: Constants.helpArticleRefundsURL,
+                icon: "questionmark.circle"
+            ),
+            HelpArticle(
+                title: L10n.string("When will I receive my item?"),
+                urlString: Constants.helpArticleDeliveryURL,
+                icon: "questionmark.circle"
+            ),
+            HelpArticle(
+                title: L10n.string("How will I know if my order has been shipped?"),
+                urlString: Constants.helpArticleOrderShippedURL,
+                icon: "questionmark.circle"
+            ),
         ]
     }
 
-    private var moreTopicsLocalized: [String] {
+    private var moreTopicArticles: [HelpArticle] {
         [
-            L10n.string("What's a collection point?"),
-            L10n.string("Item says \"Delivered\" but I don't have it"),
-            L10n.string("What's Vacation mode?"),
-            L10n.string("How do I earn a trusted seller badge?")
+            HelpArticle(
+                title: L10n.string("What's a collection point?"),
+                urlString: Constants.helpArticleCollectionPointURL,
+                icon: "doc.text"
+            ),
+            HelpArticle(
+                title: L10n.string("Item says \"Delivered\" but I don't have it"),
+                urlString: Constants.helpArticleDeliveredNotReceivedURL,
+                icon: "doc.text"
+            ),
+            HelpArticle(
+                title: L10n.string("What's Vacation mode?"),
+                urlString: Constants.helpArticleVacationModeURL,
+                icon: "doc.text"
+            ),
+            HelpArticle(
+                title: L10n.string("How do I earn a trusted seller badge?"),
+                urlString: Constants.helpArticleTrustedSellerURL,
+                icon: "doc.text"
+            ),
         ]
+    }
+
+    private var filteredFaq: [HelpArticle] {
+        filterArticles(faqArticles)
+    }
+
+    private var filteredMore: [HelpArticle] {
+        filterArticles(moreTopicArticles)
+    }
+
+    private func filterArticles(_ items: [HelpArticle]) -> [HelpArticle] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return items }
+        return items.filter { $0.title.lowercased().contains(q) }
     }
 
     private var helpListDivider: some View {
@@ -298,25 +350,36 @@ struct HelpCentreView: View {
                         .font(Theme.Typography.headline)
                         .foregroundColor(Theme.Colors.primaryText)
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(faqTitles.enumerated()), id: \.offset) { index, title in
-                            MenuItemRow(title: title, icon: "questionmark.circle", action: {})
-                            if index < faqTitles.count - 1 { helpListDivider }
+                    if filteredFaq.isEmpty, !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(L10n.string("No matching topics"))
+                            .font(Theme.Typography.body)
+                            .foregroundColor(Theme.Colors.secondaryText)
+                            .padding(.vertical, Theme.Spacing.sm)
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(filteredFaq.enumerated()), id: \.element) { index, article in
+                                helpArticleLink(article)
+                                if index < filteredFaq.count - 1 { helpListDivider }
+                            }
                         }
+                        .padding(.vertical, Theme.Spacing.sm)
                     }
-                    .padding(.vertical, Theme.Spacing.sm)
 
                     Text(L10n.string("More topics"))
                         .font(Theme.Typography.headline)
                         .foregroundColor(Theme.Colors.primaryText)
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(moreTopicsLocalized.enumerated()), id: \.offset) { index, title in
-                            MenuItemRow(title: title, icon: "doc.text", action: {})
-                            if index < moreTopicsLocalized.count - 1 { helpListDivider }
+                    if filteredMore.isEmpty, !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        EmptyView()
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(filteredMore.enumerated()), id: \.element) { index, article in
+                                helpArticleLink(article)
+                                if index < filteredMore.count - 1 { helpListDivider }
+                            }
                         }
+                        .padding(.vertical, Theme.Spacing.sm)
                     }
-                    .padding(.vertical, Theme.Spacing.sm)
 
                     Color.clear.frame(height: 100)
                 }
@@ -345,6 +408,25 @@ struct HelpCentreView: View {
         }
         .navigationTitle(L10n.string("Help Centre"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func helpArticleLink(_ article: HelpArticle) -> some View {
+        NavigationLink(destination: HostedWebArticleView(title: article.title, urlString: article.urlString)) {
+            HStack(spacing: Theme.Spacing.md) {
+                MenuRowContent(
+                    title: article.title,
+                    subtitle: nil,
+                    icon: article.icon,
+                    iconAndSubtitleColor: Theme.primaryColor
+                )
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Theme.Colors.tertiaryText)
+                    .padding(.trailing, Theme.Spacing.md)
+            }
+        }
+        .buttonStyle(PlainTappableButtonStyle())
     }
 }
 

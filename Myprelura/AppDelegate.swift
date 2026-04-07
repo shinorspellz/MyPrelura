@@ -29,6 +29,8 @@ extension Notification.Name {
     static let preluraRecentlyViewedDidUpdate = Notification.Name("PreluraRecentlyViewedDidUpdate")
     /// Posted after admin wipes orders/payments so Dashboard can refetch `userEarnings`.
     static let preluraSellerEarningsShouldRefresh = Notification.Name("PreluraSellerEarningsShouldRefresh")
+    /// In-app notification list changed (read/delete) so the home bell badge can refresh.
+    static let preluraInAppNotificationsDidChange = Notification.Name("PreluraInAppNotificationsDidChange")
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {

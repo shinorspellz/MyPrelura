@@ -3,6 +3,7 @@ import Shimmer
 
 struct HomeView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject private var bellUnreadStore: BellUnreadStore
     @ObservedObject var tabCoordinator: TabCoordinator
     @StateObject private var viewModel = HomeViewModel()
     @State private var searchText: String = ""
@@ -10,7 +11,7 @@ struct HomeView: View {
     @State private var showAIChat: Bool = false
     @State private var showGuestSignInPrompt: Bool = false
 
-    let categories = ["All", "Women", "Men", "Kids", "Toddlers"]
+    let categories = ["All", "Women", "Men", "Boys", "Girls", "Toddlers"]
 
     private let topId = "home_top"
 
@@ -95,10 +96,10 @@ struct HomeView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: Theme.Spacing.sm) {
-                    NavigationLink(destination: NotificationsListView()) {
-                        Image(systemName: "bell")
-                            .foregroundColor(Theme.Colors.primaryText)
-                            .frame(width: Theme.AppBar.buttonSize, height: Theme.AppBar.buttonSize)
+                    NavigationLink(destination: NotificationsListView()
+                        .environmentObject(authService)
+                        .environmentObject(bellUnreadStore)) {
+                        NotificationToolbarBellVisual(hasUnread: bellUnreadStore.hasUnread)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(HapticTapButtonStyle())
@@ -110,13 +111,19 @@ struct HomeView: View {
         }
         .onAppear {
             viewModel.updateAuthToken(authService.isGuestMode ? nil : authService.authToken)
+            bellUnreadStore.scheduleRefresh(authService: authService)
         }
         .onChange(of: authService.isGuestMode) { _, _ in
             viewModel.updateAuthToken(authService.isGuestMode ? nil : authService.authToken)
+            bellUnreadStore.scheduleRefresh(authService: authService)
             if authService.isGuestMode { viewModel.loadData() }
         }
         .onChange(of: authService.authToken) { _, _ in
             if !authService.isGuestMode { viewModel.updateAuthToken(authService.authToken) }
+            bellUnreadStore.scheduleRefresh(authService: authService)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .preluraInAppNotificationsDidChange)) { _ in
+            bellUnreadStore.scheduleRefresh(authService: authService)
         }
         .background(
             NavigationLink(destination: AIChatView(viewModel: viewModel).environmentObject(authService), isActive: $showAIChat) {
@@ -396,5 +403,7 @@ struct HomeItemCard: View {
 
 #Preview {
     HomeView(tabCoordinator: TabCoordinator())
+        .environmentObject(AuthService())
+        .environmentObject(BellUnreadStore())
         .preferredColorScheme(.dark)
 }
