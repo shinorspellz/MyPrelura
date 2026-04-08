@@ -15,9 +15,7 @@ struct ServerLookbookPost: Decodable {
     let caption: String?
     let username: String
     let createdAt: String?
-    var likesCount: Int?
     var commentsCount: Int?
-    var userLiked: Bool?
 }
 
 struct ServerLookbookComment: Decodable, Identifiable {
@@ -158,7 +156,7 @@ final class LookbookService {
         let query = """
         mutation CreateLookbook($imageUrl: String!, $caption: String) {
           createLookbook(imageUrl: $imageUrl, caption: $caption) {
-            lookbookPost { id imageUrl caption username createdAt likesCount commentsCount userLiked }
+            lookbookPost { id imageUrl caption username createdAt commentsCount }
             success
             message
           }
@@ -194,8 +192,8 @@ final class LookbookService {
         let query = """
         query Lookbooks($first: Int) {
           lookbooks(first: $first) {
-            nodes { id imageUrl caption username createdAt likesCount commentsCount userLiked }
-            edges { node { id imageUrl caption username createdAt likesCount commentsCount userLiked } }
+            nodes { id imageUrl caption username createdAt commentsCount }
+            edges { node { id imageUrl caption username createdAt commentsCount } }
           }
         }
         """
@@ -220,37 +218,6 @@ final class LookbookService {
             return edges.compactMap { $0.node }
         }
         return []
-    }
-
-    func toggleLike(postId: String) async throws -> (liked: Bool, likesCount: Int) {
-        let query = """
-        mutation ToggleLookbookLike($postId: UUID!) {
-          toggleLookbookLike(postId: $postId) {
-            success
-            liked
-            likesCount
-            message
-          }
-        }
-        """
-        let variables: [String: Any] = ["postId": postId]
-        struct Response: Decodable { let toggleLookbookLike: Payload? }
-        struct Payload: Decodable {
-            let success: Bool?
-            let liked: Bool?
-            let likesCount: Int?
-            let message: String?
-        }
-        let response: Response = try await client.execute(
-            query: query,
-            variables: variables,
-            operationName: "ToggleLookbookLike",
-            responseType: Response.self
-        )
-        guard let payload = response.toggleLookbookLike, payload.success == true else {
-            throw NSError(domain: "LookbookService", code: -1, userInfo: [NSLocalizedDescriptionKey: response.toggleLookbookLike?.message ?? "Like failed"])
-        }
-        return (payload.liked ?? false, payload.likesCount ?? 0)
     }
 
     func fetchComments(postId: String) async throws -> [ServerLookbookComment] {

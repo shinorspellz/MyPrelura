@@ -9,7 +9,7 @@ import SwiftUI
 import Shimmer
 import UIKit
 
-/// One lookbook post: image(s), poster, likes, comments, styles for filtering. Remote URLs in `imageUrls` (carousel), or legacy document/asset.
+/// One lookbook post: image(s), poster, comments, styles for filtering. Remote URLs in `imageUrls` (carousel), or legacy document/asset.
 /// Optional tags + productSnapshots come from local LookbookFeedStore (merged when post id / URL matches).
 struct LookbookEntry: Identifiable {
     let id: UUID
@@ -22,16 +22,14 @@ struct LookbookEntry: Identifiable {
     var imageUrl: String? { imageUrls.first }
     let posterUsername: String
     let caption: String?
-    var likesCount: Int
     var commentsCount: Int
-    var isLiked: Bool
     let styles: [String]
     /// Tag positions (0–1) and productIds; from local store when available.
     let tags: [LookbookTagData]?
     /// productId -> snapshot for thumbnails; from local store when available.
     let productSnapshots: [String: LookbookProductSnapshot]?
 
-    init(id: UUID? = nil, imageNames: [String], documentImagePath: String? = nil, imageUrl: String? = nil, posterUsername: String, caption: String? = nil, likesCount: Int, commentsCount: Int, isLiked: Bool, styles: [String], tags: [LookbookTagData]? = nil, productSnapshots: [String: LookbookProductSnapshot]? = nil) {
+    init(id: UUID? = nil, imageNames: [String], documentImagePath: String? = nil, imageUrl: String? = nil, posterUsername: String, caption: String? = nil, commentsCount: Int, styles: [String], tags: [LookbookTagData]? = nil, productSnapshots: [String: LookbookProductSnapshot]? = nil) {
         self.id = id ?? UUID()
         self.imageNames = imageNames
         self.documentImagePath = documentImagePath
@@ -42,9 +40,7 @@ struct LookbookEntry: Identifiable {
         }
         self.posterUsername = posterUsername
         self.caption = caption
-        self.likesCount = likesCount
         self.commentsCount = commentsCount
-        self.isLiked = isLiked
         self.styles = styles
         self.tags = tags
         self.productSnapshots = productSnapshots
@@ -69,9 +65,7 @@ struct LookbookEntry: Identifiable {
         }
         self.posterUsername = serverPost.username
         self.caption = serverPost.caption
-        self.likesCount = serverPost.likesCount ?? 0
         self.commentsCount = serverPost.commentsCount ?? 0
-        self.isLiked = serverPost.userLiked ?? false
         self.styles = localRecord?.styles ?? []
         self.tags = localRecord?.tags
         self.productSnapshots = localRecord?.productSnapshots
@@ -321,28 +315,6 @@ struct LookbookView: View {
     private func lookbookFeedRow(model: LookbookFeedRowModel) -> some View {
         LookbookFeedRowView(
             entry: model.entry,
-            onHeartTap: { entry in
-                let entryId = entry.id
-                guard let i = entries.firstIndex(where: { $0.id == entryId }) else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    var e = entries[i]
-                    e.isLiked.toggle()
-                    e.likesCount += e.isLiked ? 1 : -1
-                    entries[i] = e
-                }
-                Task { await syncLookbookLike(postId: entryId.uuidString) }
-            },
-            onImageDoubleTap: { entry in
-                let entryId = entry.id
-                guard let i = entries.firstIndex(where: { $0.id == entryId }), !entries[i].isLiked else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    var e = entries[i]
-                    e.isLiked = true
-                    e.likesCount += 1
-                    entries[i] = e
-                }
-                Task { await syncLookbookLike(postId: entryId.uuidString) }
-            },
             onCommentsTap: { entry in commentsEntry = entry },
             onImageTap: { entry in
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
@@ -353,32 +325,6 @@ struct LookbookView: View {
         )
         .id(model.id)
         .padding(.bottom, lookbookSpacing)
-    }
-
-    private func syncLookbookLike(postId: String) async {
-        do {
-            let client = GraphQLClient()
-            client.setAuthToken(authService.authToken)
-            let service = LookbookService(client: client)
-            let result = try await service.toggleLike(postId: postId)
-            await MainActor.run {
-                guard let uuid = UUID(uuidString: postId),
-                      let idx = entries.firstIndex(where: { $0.id == uuid }) else { return }
-                var entry = entries[idx]
-                entry.isLiked = result.liked
-                entry.likesCount = result.likesCount
-                entries[idx] = entry
-            }
-        } catch {
-            await MainActor.run {
-                guard let uuid = UUID(uuidString: postId),
-                      let idx = entries.firstIndex(where: { $0.id == uuid }) else { return }
-                var entry = entries[idx]
-                entry.isLiked.toggle()
-                entry.likesCount += entry.isLiked ? 1 : -1
-                entries[idx] = entry
-            }
-        }
     }
 }
 
@@ -499,28 +445,6 @@ private struct LookbookTopicFeedView: View {
     private func topicFeedRow(model: LookbookFeedRowModel) -> some View {
         LookbookFeedRowView(
             entry: model.entry,
-            onHeartTap: { entry in
-                let entryId = entry.id
-                guard let i = entries.firstIndex(where: { $0.id == entryId }) else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    var e = entries[i]
-                    e.isLiked.toggle()
-                    e.likesCount += e.isLiked ? 1 : -1
-                    entries[i] = e
-                }
-                Task { await syncLookbookLike(postId: entryId.uuidString) }
-            },
-            onImageDoubleTap: { entry in
-                let entryId = entry.id
-                guard let i = entries.firstIndex(where: { $0.id == entryId }), !entries[i].isLiked else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    var e = entries[i]
-                    e.isLiked = true
-                    e.likesCount += 1
-                    entries[i] = e
-                }
-                Task { await syncLookbookLike(postId: entryId.uuidString) }
-            },
             onCommentsTap: { entry in commentsEntry = entry },
             onImageTap: { entry in
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
@@ -568,32 +492,6 @@ private struct LookbookTopicFeedView: View {
                     || (error as? URLError)?.code == .cancelled
                     || error.localizedDescription.lowercased().contains("cancelled")
                 feedError = isCancelled ? nil : error.localizedDescription
-            }
-        }
-    }
-
-    private func syncLookbookLike(postId: String) async {
-        do {
-            let client = GraphQLClient()
-            client.setAuthToken(authService.authToken)
-            let service = LookbookService(client: client)
-            let result = try await service.toggleLike(postId: postId)
-            await MainActor.run {
-                guard let uuid = UUID(uuidString: postId),
-                      let idx = entries.firstIndex(where: { $0.id == uuid }) else { return }
-                var entry = entries[idx]
-                entry.isLiked = result.liked
-                entry.likesCount = result.likesCount
-                entries[idx] = entry
-            }
-        } catch {
-            await MainActor.run {
-                guard let uuid = UUID(uuidString: postId),
-                      let idx = entries.firstIndex(where: { $0.id == uuid }) else { return }
-                var entry = entries[idx]
-                entry.isLiked.toggle()
-                entry.likesCount += entry.isLiked ? 1 : -1
-                entries[idx] = entry
             }
         }
     }
@@ -880,7 +778,7 @@ private struct LookbookTransparentFullscreenOverlay: View {
     }
 }
 
-// MARK: - Feed image: canonical aspect bucket, fill frame, double-tap like, pinch zoom, bag for tagged products.
+// MARK: - Feed image: canonical aspect bucket, fill frame, optional double-tap, pinch zoom, bag for tagged products.
 private struct LookbookFeedImage: View {
     let imageName: String
     let documentImagePath: String?
@@ -889,7 +787,7 @@ private struct LookbookFeedImage: View {
     let productSnapshots: [String: LookbookProductSnapshot]?
     /// When false, tagged pins are hidden (e.g. secondary carousel slides).
     let showTagOverlay: Bool
-    let onDoubleTapLike: () -> Void
+    let onDoubleTapLike: (() -> Void)?
     let onTap: () -> Void
     let onProductTap: (String) -> Void
 
@@ -984,8 +882,19 @@ private struct LookbookFeedImage: View {
         }
     }
 
+    @ViewBuilder
+    private func applyTapGestures(to base: some View) -> some View {
+        if let dbl = onDoubleTapLike {
+            base
+                .onTapGesture(count: 2, perform: dbl)
+                .onTapGesture(perform: onTap)
+        } else {
+            base.onTapGesture(perform: onTap)
+        }
+    }
+
     var body: some View {
-        let core = filledImageLayer
+        let framed = filledImageLayer
             .scaleEffect(scale)
             .offset(dragOffset)
             .frame(maxWidth: .infinity)
@@ -1023,8 +932,8 @@ private struct LookbookFeedImage: View {
             }
             .contentShape(Rectangle())
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onTapGesture(count: 2, perform: onDoubleTapLike)
-            .onTapGesture(perform: onTap)
+
+        let core = applyTapGestures(to: framed)
             // `highPriorityGesture` steals drags from the parent ScrollView; pinch still works with `simultaneousGesture`.
             .simultaneousGesture(pinchZoomGesture)
 
@@ -1175,8 +1084,6 @@ private struct LookbookPostCardShimmer: View {
 // MARK: - Feed row: one post; multiple images in a page TabView (carousel).
 private struct LookbookFeedRowView: View {
     let entry: LookbookEntry
-    let onHeartTap: (LookbookEntry) -> Void
-    let onImageDoubleTap: (LookbookEntry) -> Void
     let onCommentsTap: (LookbookEntry) -> Void
     let onImageTap: (LookbookEntry) -> Void
     let onProductTap: (String) -> Void
@@ -1217,7 +1124,7 @@ private struct LookbookFeedRowView: View {
                         tags: entry.tags,
                         productSnapshots: entry.productSnapshots,
                         showTagOverlay: idx == 0,
-                        onDoubleTapLike: { onImageDoubleTap(entry) },
+                        onDoubleTapLike: nil,
                         onTap: { onImageTap(entry) },
                         onProductTap: onProductTap
                     )
@@ -1233,7 +1140,7 @@ private struct LookbookFeedRowView: View {
                 tags: entry.tags,
                 productSnapshots: entry.productSnapshots,
                 showTagOverlay: true,
-                onDoubleTapLike: { onImageDoubleTap(entry) },
+                onDoubleTapLike: nil,
                 onTap: { onImageTap(entry) },
                 onProductTap: onProductTap
             )
@@ -1276,21 +1183,6 @@ private struct LookbookFeedRowView: View {
                 .padding(.horizontal, Theme.Spacing.md)
 
             HStack(spacing: Theme.Spacing.lg) {
-                Button(action: { onHeartTap(entry) }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: entry.isLiked ? "heart.fill" : "heart")
-                            .font(.system(size: iconSize))
-                            .foregroundColor(entry.isLiked ? Theme.primaryColor : Theme.Colors.primaryText)
-                        Text("\(entry.likesCount)")
-                            .font(.system(size: 14))
-                            .foregroundColor(Theme.Colors.primaryText)
-                        Text("Likes")
-                            .font(.system(size: 14))
-                            .foregroundColor(Theme.Colors.secondaryText)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PlainTappableButtonStyle())
                 Button(action: { onCommentsTap(entry) }) {
                     HStack(spacing: 4) {
                         Image(systemName: "bubble.right")
