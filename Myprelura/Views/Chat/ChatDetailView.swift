@@ -3881,9 +3881,8 @@ private struct OrderIssueChatCardView: View {
                         .font(Theme.Typography.body)
                         .foregroundColor(Theme.Colors.secondaryText)
                 }
-                if let details = payload?.description,
-                   !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(details)
+                if let detailsText = Self.issueDetailsBodyText(issueType: payload?.issueType, description: payload?.description) {
+                    Text(detailsText)
                         .font(Theme.Typography.body)
                         .foregroundColor(Theme.Colors.primaryText)
                 }
@@ -4031,7 +4030,17 @@ private struct OrderIssueChatCardView: View {
         return ("Issue updated", "Tap for details.", "info.circle.fill", Theme.Colors.secondaryText)
     }
 
-    private func humanReadableIssueType(_ raw: String) -> String {
+    /// Skips the body line when the server echoes the same string as the issue-type label (avoids duplicate "Item not as described").
+    private static func issueDetailsBodyText(issueType: String?, description: String?) -> String? {
+        guard let raw = description?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        if let t = issueType, !t.isEmpty {
+            let label = Self.humanReadableIssueTypeStatic(t)
+            if raw.caseInsensitiveCompare(label) == .orderedSame { return nil }
+        }
+        return raw
+    }
+
+    private static func humanReadableIssueTypeStatic(_ raw: String) -> String {
         switch raw {
         case "NOT_AS_DESCRIBED": return "Item not as described"
         case "TOO_SMALL": return "Item is too small"
@@ -4043,6 +4052,10 @@ private struct OrderIssueChatCardView: View {
         case "OTHER": return "Other"
         default: return raw.replacingOccurrences(of: "_", with: " ").capitalized
         }
+    }
+
+    private func humanReadableIssueType(_ raw: String) -> String {
+        Self.humanReadableIssueTypeStatic(raw)
     }
 }
 
