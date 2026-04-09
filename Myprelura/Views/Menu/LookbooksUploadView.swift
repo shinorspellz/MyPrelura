@@ -246,11 +246,63 @@ private let lookbookUploadStylePills: [String] = [
     "SUMMER_STYLES", "WINTER_ESSENTIALS", "ATHLEISURE", "DATE_NIGHT", "VACATION_RESORT_WEAR"
 ]
 
+/// Fixed export sizes for lookbook uploads (crop + resize before upload). Aspect = width ÷ height.
+enum LookbookUploadCropPreset: Int, CaseIterable, Identifiable, Equatable {
+    case square1080
+    case portrait1080x1350
+    case portrait1080x1600
+    case landscape1920x1080
+    case landscape1350x1080
+
+    var id: Int { rawValue }
+
+    var exportWidth: Int {
+        switch self {
+        case .square1080, .portrait1080x1350, .portrait1080x1600: return 1080
+        case .landscape1920x1080: return 1920
+        case .landscape1350x1080: return 1350
+        }
+    }
+
+    var exportHeight: Int {
+        switch self {
+        case .square1080: return 1080
+        case .portrait1080x1350: return 1350
+        case .portrait1080x1600: return 1600
+        case .landscape1920x1080: return 1080
+        case .landscape1350x1080: return 1080
+        }
+    }
+
+    var aspectRatio: CGFloat {
+        CGFloat(exportWidth) / CGFloat(exportHeight)
+    }
+
+    var menuTitle: String {
+        switch self {
+        case .square1080: return "1 : 1"
+        case .portrait1080x1350: return "4 : 5"
+        case .portrait1080x1600: return "Tall"
+        case .landscape1920x1080: return "16 : 9"
+        case .landscape1350x1080: return "5 : 4"
+        }
+    }
+
+    var menuSubtitle: String {
+        "\(exportWidth)×\(exportHeight)"
+    }
+}
+
 struct LookbooksUploadView: View {
     @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) private var dismiss
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
+    @State private var rawPickerImages: [UIImage] = []
+    @State private var showCropFlow = false
+    @State private var cropQueueIndex = 0
+    @State private var cropAccumulated: [UIImage] = []
+    @State private var cropPreset: LookbookUploadCropPreset = .portrait1080x1350
     @State private var caption: String = ""
     @State private var selectedStylePills: Set<String> = []
     @State private var uploadState: UploadState = .idle
@@ -456,6 +508,33 @@ struct LookbooksUploadView: View {
         .navigationTitle("Lookbooks Upload")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .fullScreenCover(isPresented: $showCropFlow) {
+            if cropQueueIndex < rawPickerImages.count {
+                LookbookUploadCropShellView(
+                    image: rawPickerImages[cropQueueIndex],
+                    imageIndex: cropQueueIndex + 1,
+                    totalImages: rawPickerImages.count,
+                    preset: $cropPreset,
+                    onCancel: cancelCropFlow,
+                    onApplyCropped: { cropped in
+                        cropAccumulated.append(cropped)
+                        if cropQueueIndex + 1 < rawPickerImages.count {
+                            cropQueueIndex += 1
+                        } else {
+                            selectedImages = cropAccumulated
+                            cropAccumulated = []
+                            cropQueueIndex = 0
+                            rawPickerImages = []
+                            showCropFlow = false
+                            tagSessionId = UUID().uuidString
+                            taggedTags = []
+                            taggedProductItems = []
+                        }
+                    }
+                )
+                .id(cropQueueIndex)
+            }
+        }
         .fullScreenCover(isPresented: $showTagScreen) {
             if let image = selectedImages.first {
                 LookbookTagProductsView(
@@ -536,10 +615,20 @@ struct LookbooksUploadView: View {
         .offset(y: showSuccessBanner ? 0 : -30)
     }
 
+    private func cancelCropFlow() {
+        showCropFlow = false
+        rawPickerImages = []
+        cropAccumulated = []
+        cropQueueIndex = 0
+        selectedItems = []
+    }
+
     private func loadImages(from items: [PhotosPickerItem]) async {
         guard !items.isEmpty else {
             await MainActor.run {
                 selectedImages = []
+                rawPickerImages = []
+                showCropFlow = false
             }
             return
         }
@@ -551,10 +640,16 @@ struct LookbooksUploadView: View {
             images.append(image)
         }
         await MainActor.run {
-            selectedImages = images
-            tagSessionId = UUID().uuidString
-            taggedTags = []
-            taggedProductItems = []
+            guard !images.isEmpty else {
+                selectedImages = []
+                rawPickerImages = []
+                showCropFlow = false
+                return
+            }
+            rawPickerImages = images
+            cropQueueIndex = 0
+            cropAccumulated = []
+            showCropFlow = true
         }
     }
 
@@ -642,153 +737,256 @@ extension LookbooksUploadView.UploadState {
     }
 }
 
-// MARK: - Full-width zoom/pan cropper (UIKit) + Save button
+// MARK: - Lookbook upload crop (fixed aspect + export size)
 
-struct ZoomableImageCropView: View {
+extension Notification.Name {
+    static let lookbookAspectCropExportRequested = Notification.Name("lookbookAspectCropExportRequested")
+}
+
+/// Full-screen crop UI: pick one of several export frames, pinch to zoom and drag to reframe.
+private struct LookbookUploadCropShellView: View {
     let image: UIImage
-    let onSave: (UIImage) -> Void
+    let imageIndex: Int
+    let totalImages: Int
+    @Binding var preset: LookbookUploadCropPreset
     let onCancel: () -> Void
+    let onApplyCropped: (UIImage) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            ZoomableImageCropRepresentable(image: image, onSave: onSave)
-                .ignoresSafeArea(edges: .top)
-            Button("Save") {
-                cropAndSave()
+            HStack {
+                Button("Cancel", action: onCancel)
+                    .foregroundStyle(Theme.Colors.primaryText)
+                Spacer()
+                Text(totalImages > 1 ? "Photo \(imageIndex) of \(totalImages)" : "Frame your photo")
+                    .font(Theme.Typography.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                Spacer()
+                Color.clear.frame(width: 56)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(Theme.Colors.background)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Export size")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .padding(.horizontal, Theme.Spacing.md)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        ForEach(LookbookUploadCropPreset.allCases) { p in
+                            let on = p == preset
+                            Button {
+                                preset = p
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.menuTitle)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(p.menuSubtitle)
+                                        .font(.caption2)
+                                        .opacity(0.85)
+                                }
+                                .foregroundStyle(on ? .white : Theme.Colors.primaryText)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(on ? Theme.primaryColor : Theme.Colors.secondaryBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Theme.Spacing.md)
+                }
+            }
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(Theme.Colors.background)
+
+            LookbookAspectCropRepresentable(image: image, preset: preset, onCropped: onApplyCropped)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+
+            PrimaryGlassButton(totalImages > 1 && imageIndex < totalImages ? "Next" : "Use photo") {
+                NotificationCenter.default.post(name: .lookbookAspectCropExportRequested, object: nil)
+            }
             .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.vertical, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.md)
             .background(Theme.Colors.background)
         }
-        .background(Color.black)
-        .overlay(alignment: .topLeading) {
-            Button(action: onCancel) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 2)
-            }
-            .padding()
-        }
-    }
-
-    private func cropAndSave() {
-        NotificationCenter.default.post(name: .lookbookCropSaveRequested, object: nil)
+        .background(Theme.Colors.background)
     }
 }
 
-extension Notification.Name {
-    static let lookbookCropSaveRequested = Notification.Name("lookbookCropSaveRequested")
-}
-
-struct ZoomableImageCropRepresentable: UIViewControllerRepresentable {
+private struct LookbookAspectCropRepresentable: UIViewControllerRepresentable {
     let image: UIImage
-    let onSave: (UIImage) -> Void
+    let preset: LookbookUploadCropPreset
+    let onCropped: (UIImage) -> Void
 
-    func makeUIViewController(context: Context) -> ZoomableCropViewController {
-        let vc = ZoomableCropViewController(image: image)
-        vc.onSave = onSave
+    func makeUIViewController(context: Context) -> LookbookAspectCropViewController {
+        let vc = LookbookAspectCropViewController(image: image, preset: preset)
+        vc.onCropped = onCropped
         return vc
     }
 
-    func updateUIViewController(_ uiViewController: ZoomableCropViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: LookbookAspectCropViewController, context: Context) {
+        uiViewController.setPreset(preset)
+    }
 }
 
-final class ZoomableCropViewController: UIViewController {
-    var onSave: ((UIImage) -> Void)?
-    private let image: UIImage
+private final class LookbookAspectCropViewController: UIViewController, UIScrollViewDelegate {
+    var onCropped: ((UIImage) -> Void)?
+    private let originalImage: UIImage
+    private(set) var preset: LookbookUploadCropPreset
     private let scrollView = UIScrollView()
     private let imageView = UIImageView()
+    private var normalizedImage: UIImage?
+    private var baseCoverScale: CGFloat = 1
 
-    init(image: UIImage) {
-        self.image = image
+    init(image: UIImage, preset: LookbookUploadCropPreset) {
+        self.originalImage = image
+        self.preset = preset
         super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    func setPreset(_ newPreset: LookbookUploadCropPreset) {
+        guard newPreset != preset else { return }
+        preset = newPreset
+        scrollView.zoomScale = 1
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        normalizedImage = Self.normalizeOrientation(originalImage)
         scrollView.delegate = self
         scrollView.minimumZoomScale = 1
-        scrollView.maximumZoomScale = 4
+        scrollView.maximumZoomScale = 5
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
+        scrollView.clipsToBounds = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scrollView)
-        imageView.image = image
-        imageView.contentMode = .scaleAspectFit
+        imageView.contentMode = .scaleToFill
         imageView.isUserInteractionEnabled = false
-        imageView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(imageView)
-        NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-        ])
-        NotificationCenter.default.addObserver(self, selector: #selector(saveRequested), name: .lookbookCropSaveRequested, object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(exportRequested),
+            name: .lookbookAspectCropExportRequested,
+            object: nil
+        )
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        var size = scrollView.bounds.size
-        if size.width <= 0 || size.height <= 0 {
-            size = view.bounds.size
+        layoutCropArea()
+    }
+
+    private func layoutCropArea() {
+        guard let img = normalizedImage else { return }
+        let iw = img.size.width
+        let ih = img.size.height
+        guard iw > 0, ih > 0, view.bounds.width > 0, view.bounds.height > 0 else { return }
+
+        let aspect = preset.aspectRatio
+        let margin: CGFloat = 12
+        let inner = view.bounds.insetBy(dx: margin, dy: margin)
+        var cw = inner.width
+        var ch = cw / aspect
+        if ch > inner.height {
+            ch = inner.height
+            cw = ch * aspect
         }
-        guard size.width > 0, size.height > 0 else { return }
-        let imgSize = image.size
-        guard imgSize.width > 0, imgSize.height > 0 else { return }
-        let scale = min(size.width / imgSize.width, size.height / imgSize.height)
-        let displayW = imgSize.width * scale
-        let displayH = imgSize.height * scale
-        imageView.frame = CGRect(x: 0, y: 0, width: displayW, height: displayH)
-        scrollView.contentSize = imageView.frame.size
+        let cx = (view.bounds.width - cw) * 0.5
+        let cy = (view.bounds.height - ch) * 0.5
+        scrollView.frame = CGRect(x: cx, y: cy, width: cw, height: ch)
+
+        baseCoverScale = max(cw / iw, ch / ih)
+        let w = iw * baseCoverScale
+        let h = ih * baseCoverScale
+        imageView.image = img
+        imageView.frame = CGRect(x: 0, y: 0, width: w, height: h)
+        scrollView.contentSize = CGSize(width: w, height: h)
         scrollView.zoomScale = 1
-        scrollView.contentOffset = .zero
+        let offsetX = max(0, (w - cw) * 0.5)
+        let offsetY = max(0, (h - ch) * 0.5)
+        scrollView.contentOffset = CGPoint(x: offsetX, y: offsetY)
     }
 
-    @objc private func saveRequested() {
-        let scale = scrollView.zoomScale
-        let offset = scrollView.contentOffset
-        let bounds = scrollView.bounds
-        let imgSize = image.size
-        let displayScale = min(bounds.width / imgSize.width, bounds.height / imgSize.height)
-        let displayW = imgSize.width * displayScale
-        let displayH = imgSize.height * displayScale
-        let cropX = (offset.x / scale) * (imgSize.width / displayW)
-        let cropY = (offset.y / scale) * (imgSize.height / displayH)
-        let cropW = (bounds.width / scale) * (imgSize.width / displayW)
-        let cropH = (bounds.height / scale) * (imgSize.height / displayH)
-        let rect = CGRect(x: cropX, y: cropY, width: cropW, height: cropH).integral
-        guard let cg = image.cgImage else {
-            if let ci = image.ciImage {
-                let ctx = CIContext()
-                guard let cg = ctx.createCGImage(ci, from: ci.extent) else { return }
-                let scaleFactor = CGFloat(cg.width) / imgSize.width
-                let pixelRect = CGRect(x: rect.minX * scaleFactor, y: rect.minY * scaleFactor, width: rect.width * scaleFactor, height: rect.height * scaleFactor).integral
-                let boundsPx = CGRect(origin: .zero, size: CGSize(width: CGFloat(cg.width), height: CGFloat(cg.height)))
-                let r = pixelRect.intersection(boundsPx)
-                guard r.width > 0, r.height > 0, let cropped = cg.cropping(to: r) else { return }
-                onSave?(UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation))
-            }
-            return
-        }
-        let scaleFactor = CGFloat(cg.width) / imgSize.width
-        let pixelRect = CGRect(x: rect.minX * scaleFactor, y: rect.minY * scaleFactor, width: rect.width * scaleFactor, height: rect.height * scaleFactor).integral
-        let boundsPx = CGRect(origin: .zero, size: CGSize(width: CGFloat(cg.width), height: CGFloat(cg.height)))
-        let r = pixelRect.intersection(boundsPx)
-        guard r.width > 0, r.height > 0, let cropped = cg.cropping(to: r) else { return }
-        onSave?(UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation))
-    }
-}
+    @objc private func exportRequested() {
+        guard let img = normalizedImage else { return }
+        let iw = img.size.width
+        let ih = img.size.height
+        let W = iw * baseCoverScale
+        let H = ih * baseCoverScale
+        guard W > 0, H > 0 else { return }
 
-extension ZoomableCropViewController: UIScrollViewDelegate {
+        let z = scrollView.zoomScale
+        let ox = scrollView.contentOffset.x / z
+        let oy = scrollView.contentOffset.y / z
+        let vw = scrollView.bounds.width / z
+        let vh = scrollView.bounds.height / z
+
+        let imgX = (ox / W) * iw
+        let imgY = (oy / H) * ih
+        let imgW = (vw / W) * iw
+        let imgH = (vh / H) * ih
+        var crop = CGRect(x: imgX, y: imgY, width: imgW, height: imgH)
+            .intersection(CGRect(x: 0, y: 0, width: iw, height: ih))
+        guard crop.width > 1, crop.height > 1 else { return }
+
+        guard let cgFull = img.cgImage else { return }
+        let pxW = CGFloat(cgFull.width)
+        let pxH = CGFloat(cgFull.height)
+        let sx = pxW / iw
+        let sy = pxH / ih
+        let pxCrop = CGRect(
+            x: crop.minX * sx,
+            y: crop.minY * sy,
+            width: crop.width * sx,
+            height: crop.height * sy
+        ).integral
+        let boundsPx = CGRect(x: 0, y: 0, width: pxW, height: pxH)
+        let clipped = pxCrop.intersection(boundsPx)
+        guard clipped.width > 1, clipped.height > 1,
+              let croppedCg = cgFull.cropping(to: clipped) else { return }
+
+        let cropped = UIImage(cgImage: croppedCg, scale: 1, orientation: .up)
+        let ew = preset.exportWidth
+        let eh = preset.exportHeight
+        guard let out = Self.resizePreservingAspect(cropped, targetWidth: ew, targetHeight: eh) else { return }
+        onCropped?(out)
+    }
+
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
+
+    private static func normalizeOrientation(_ image: UIImage) -> UIImage {
+        if image.imageOrientation == .up { return image }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        let r = UIGraphicsImageRenderer(size: image.size, format: format)
+        return r.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
+    private static func resizePreservingAspect(_ image: UIImage, targetWidth: Int, targetHeight: Int) -> UIImage? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let size = CGSize(width: targetWidth, height: targetHeight)
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
 }
 
 private struct ImageFramePreferenceKey: PreferenceKey {

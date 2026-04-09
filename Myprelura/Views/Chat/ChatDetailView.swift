@@ -284,6 +284,8 @@ struct ChatDetailView: View {
     @State private var isLoadingOfferHistory = false
     /// Prevent repeated initial scroll bursts when re-entering the same thread.
     @State private var hasAutoScrolledToBottomForThisChat = false
+    /// Bumps after each full conversation reload so order-issue cards refetch live status.
+    @State private var orderIssueLiveRefreshTick: Int = 0
     /// Stable id at end of scroll content so `scrollTo` works with `LazyVStack` (last message id may not be laid out yet).
     private static let chatBottomAnchorId = "chat_bottom_anchor"
     private static let chatPeerTypingScrollId = "chat_peer_typing_inline"
@@ -702,8 +704,10 @@ struct ChatDetailView: View {
                 } else if message.isOrderIssue {
                     let issueCard = OrderIssueChatCardView(
                         message: message,
-                        currentUsername: authService.username
+                        currentUsername: authService.username,
+                        refreshTick: orderIssueLiveRefreshTick
                     )
+                    .environmentObject(authService)
                     .id(message.id)
                     if isCurrentUser(username: message.senderUsername) {
                         issueCard
@@ -1370,6 +1374,7 @@ struct ChatDetailView: View {
                 } else {
                     self.rebuildTimelineOrder()
                 }
+                self.orderIssueLiveRefreshTick &+= 1
             }
             if let msgs = fetchedMsgs, !msgs.isEmpty {
                 let idsToMarkRead = msgs
@@ -3837,6 +3842,12 @@ private struct SellerOrderProblemOptionsView: View {
 private struct OrderIssueChatCardView: View {
     let message: Message
     var currentUsername: String?
+    var refreshTick: Int
+
+    @EnvironmentObject private var authService: AuthService
+    private let userService = UserService()
+    @State private var liveIssue: OrderIssueDetails?
+    @State private var isFetchingLive = false
 
     private static func relativeTimestamp(for date: Date) -> String {
         let now = Date()
@@ -3859,6 +3870,9 @@ private struct OrderIssueChatCardView: View {
         }()
         NavigationLink(destination: OrderIssueDetailView(issueId: payload?.issueId, publicId: payload?.publicId)) {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                if let live = liveIssue, !orderIssueIsPending(live) {
+                    resolutionBanner(for: live)
+                }
                 Text(titleText)
                     .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.primaryText)
@@ -3894,7 +3908,7 @@ private struct OrderIssueChatCardView: View {
                     }
                 }
                 HStack(alignment: .center, spacing: Theme.Spacing.sm) {
-                    Text("Order on hold")
+                    Text(footerStatusLine)
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.secondaryText)
                     Spacer(minLength: 0)
@@ -3913,6 +3927,108 @@ private struct OrderIssueChatCardView: View {
             )
         }
         .buttonStyle(PlainTappableButtonStyle())
+        .task(id: refreshTick) { await fetchLiveIssue() }
+    }
+
+    private var footerStatusLine: String {
+        if let live = liveIssue {
+            if orderIssueIsPending(live) { return "Order on hold" }
+            return "Tap for resolution details"
+        }
+        if isFetchingLive { return "Checking status…" }
+        return "Order on hold"
+    }
+
+    private func fetchLiveIssue() async {
+        let payload = message.parsedOrderIssueDetails
+        let hasId = payload?.issueId != nil
+        let pub = payload?.publicId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard hasId || !pub.isEmpty else { return }
+        await MainActor.run { isFetchingLive = true }
+        userService.updateAuthToken(authService.authToken)
+        do {
+            let issue = try await userService.getOrderIssue(issueId: payload?.issueId, publicId: pub.isEmpty ? nil : pub)
+            await MainActor.run {
+                liveIssue = issue
+                isFetchingLive = false
+            }
+        } catch {
+            await MainActor.run {
+                isFetchingLive = false
+            }
+        }
+    }
+
+    private func orderIssueIsPending(_ issue: OrderIssueDetails) -> Bool {
+        (issue.status ?? "").uppercased() == "PENDING"
+    }
+
+    @ViewBuilder
+    private func resolutionBanner(for issue: OrderIssueDetails) -> some View {
+        let meta = resolutionMeta(for: issue)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: meta.icon)
+                .font(.title2)
+                .foregroundStyle(meta.tint)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meta.title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.primaryText)
+                Text(meta.subtitle)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.Colors.tertiaryText)
+        }
+        .padding(Theme.Spacing.sm)
+        .background(meta.tint.opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func resolutionMeta(for issue: OrderIssueDetails) -> (title: String, subtitle: String, icon: String, tint: Color) {
+        let st = (issue.status ?? "").uppercased()
+        let me = authService.username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let raised = issue.raisedBy?.username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let iAmReporter = !me.isEmpty && me == raised
+
+        if st == "WITHDRAWN" {
+            let sub = iAmReporter
+                ? "You withdrew this report and accepted the order."
+                : "The buyer withdrew this report."
+            return ("Report withdrawn", sub, "arrow.uturn.backward.circle.fill", Theme.Colors.secondaryText)
+        }
+        if st == "DECLINED" {
+            return (
+                "Case declined by support",
+                "No refund was approved on this report. Tap for details.",
+                "xmark.circle.fill",
+                Theme.Colors.error
+            )
+        }
+        if st == "RESOLVED" {
+            switch (issue.resolution ?? "").uppercased() {
+            case "REFUND_WITHOUT_RETURN":
+                return (
+                    "Refund completed",
+                    "Buyer was refunded (no return). Tap for details.",
+                    "banknote.fill",
+                    Theme.primaryColor
+                )
+            case "REFUND_WITH_RETURN":
+                let p = (issue.returnPostagePaidBy ?? "").uppercased()
+                let sub: String
+                if p == "SELLER" { sub = "Return required — seller pays postage. Tap for details." }
+                else if p == "BUYER" { sub = "Return required — buyer pays postage. Tap for details." }
+                else { sub = "Return required before refund completes. Tap for details." }
+                return ("Refund with return", sub, "arrow.uturn.backward.circle.fill", Theme.primaryColor)
+            default:
+                return ("Case resolved", "Tap for outcome details.", "checkmark.seal.fill", Theme.primaryColor)
+            }
+        }
+        return ("Issue updated", "Tap for details.", "info.circle.fill", Theme.Colors.secondaryText)
     }
 
     private func humanReadableIssueType(_ raw: String) -> String {

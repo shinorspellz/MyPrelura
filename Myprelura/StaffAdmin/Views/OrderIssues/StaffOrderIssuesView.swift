@@ -1,5 +1,17 @@
 import SwiftUI
 
+extension Notification.Name {
+    /// Posted after staff successfully resolves or declines an order issue so report detail can refresh.
+    static let staffOrderIssueDidMutate = Notification.Name("StaffOrderIssueDidMutate")
+}
+
+/// Deep-link from a report’s Actions into the staffed resolve flow (confirmation dialogs).
+enum StaffOrderIssueStaffEntry: Hashable {
+    case refundWithoutReturn
+    case refundWithReturn
+    case decline
+}
+
 /// WEARHOUSE Pro: list all order issues; resolve pending disputes with refund / return / decline (GraphQL `adminResolveOrderIssue`).
 struct StaffOrderIssuesView: View {
     var wrapsInNavigationStack: Bool = true
@@ -127,6 +139,8 @@ private struct StaffOrderIssueRowLabel: View {
 
 struct StaffOrderIssueDetailView: View {
     let issue: StaffOrderIssueRow
+    /// When set (e.g. from Reports → Actions), present the matching confirmation once if the issue is still pending.
+    var staffEntry: StaffOrderIssueStaffEntry? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(AdminSession.self) private var session
@@ -136,6 +150,7 @@ struct StaffOrderIssueDetailView: View {
     @State private var showRefundWithConfirm = false
     @State private var showDeclineConfirm = false
     @State private var returnPostagePayer = "SELLER"
+    @State private var didApplyStaffEntry = false
 
     private var isPending: Bool {
         (issue.status ?? "").uppercased() == "PENDING"
@@ -162,6 +177,18 @@ struct StaffOrderIssueDetailView: View {
         .background(Theme.Colors.background)
         .navigationTitle("Issue #\(issue.id)")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            guard !didApplyStaffEntry, let entry = staffEntry, isPending else { return }
+            didApplyStaffEntry = true
+            switch entry {
+            case .refundWithoutReturn:
+                showRefundWithoutConfirm = true
+            case .refundWithReturn:
+                showRefundWithConfirm = true
+            case .decline:
+                showDeclineConfirm = true
+            }
+        }
         .confirmationDialog(
             "Refund without return?",
             isPresented: $showRefundWithoutConfirm,
@@ -336,6 +363,7 @@ struct StaffOrderIssueDetailView: View {
             )
             await MainActor.run {
                 busy = false
+                NotificationCenter.default.post(name: .staffOrderIssueDidMutate, object: nil)
                 dismiss()
             }
         } catch {
@@ -353,6 +381,7 @@ struct StaffOrderIssueDetailLoaderView: View {
     /// `allReports` backend id when it matches `allOrderIssues.id`.
     var preferredIssueId: Int
     var orderId: Int?
+    var staffEntry: StaffOrderIssueStaffEntry? = nil
 
     @Environment(AdminSession.self) private var session
     @State private var issue: StaffOrderIssueRow?
@@ -365,7 +394,7 @@ struct StaffOrderIssueDetailLoaderView: View {
                 ProgressView("Loading issue…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let issue {
-                StaffOrderIssueDetailView(issue: issue)
+                StaffOrderIssueDetailView(issue: issue, staffEntry: staffEntry)
             } else {
                 Text(
                     loadError

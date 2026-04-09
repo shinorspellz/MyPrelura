@@ -17,6 +17,9 @@ struct AdminReportDetailView: View {
     @State private var showDeleteListingConfirm = false
     @State private var showSuspendConfirm = false
     @State private var showBanConfirm = false
+    /// Latest `OrderIssue` row for this report (for hiding staff actions after resolve/decline/withdraw).
+    @State private var linkedOrderIssue: StaffOrderIssueRow?
+    @State private var isLoadingLinkedOrderIssue = false
 
     private var reportTitle: String {
         if let p = report.publicId, !p.isEmpty { return p }
@@ -135,7 +138,19 @@ struct AdminReportDetailView: View {
                 }
             }
         }
-        .task(id: report.id) { await loadReportedAccountIdIfNeeded() }
+        .task(id: report.id) {
+            await loadReportedAccountIdIfNeeded()
+            await loadLinkedOrderIssueIfNeeded()
+        }
+        .onAppear {
+            if report.reportType == kOrderIssueType {
+                Task { await loadLinkedOrderIssueIfNeeded() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .staffOrderIssueDidMutate)) { _ in
+            guard report.reportType == kOrderIssueType else { return }
+            Task { await loadLinkedOrderIssueIfNeeded() }
+        }
         .alert(feedbackTitle ?? "", isPresented: Binding(
             get: { feedbackMessage != nil },
             set: { if !$0 { feedbackMessage = nil; feedbackTitle = nil } }
@@ -323,14 +338,70 @@ struct AdminReportDetailView: View {
                     }
                 }
             } else if report.reportType == kOrderIssueType {
-                NavigationLink {
-                    StaffOrderIssueDetailLoaderView(
-                        preferredIssueId: report.backendRowId,
-                        orderId: report.orderId
-                    )
-                    .environment(session)
-                } label: {
-                    Label("Refund, return, or decline issue", systemImage: "arrow.uturn.backward.circle")
+                if isLoadingLinkedOrderIssue, linkedOrderIssue == nil {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading issue status…")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                } else if let issue = linkedOrderIssue, staffOrderIssueIsActionable(issue) {
+                    NavigationLink {
+                        StaffOrderIssueDetailLoaderView(
+                            preferredIssueId: report.backendRowId,
+                            orderId: report.orderId,
+                            staffEntry: .refundWithoutReturn
+                        )
+                        .environment(session)
+                    } label: {
+                        Label("Refund without return", systemImage: "banknote")
+                    }
+                    NavigationLink {
+                        StaffOrderIssueDetailLoaderView(
+                            preferredIssueId: report.backendRowId,
+                            orderId: report.orderId,
+                            staffEntry: .refundWithReturn
+                        )
+                        .environment(session)
+                    } label: {
+                        Label("Refund with return", systemImage: "arrow.uturn.backward.circle")
+                    }
+                    NavigationLink {
+                        StaffOrderIssueDetailLoaderView(
+                            preferredIssueId: report.backendRowId,
+                            orderId: report.orderId,
+                            staffEntry: .decline
+                        )
+                        .environment(session)
+                    } label: {
+                        Label("Decline issue", systemImage: "xmark.circle")
+                    }
+                } else if let issue = linkedOrderIssue {
+                    LabeledContent("Recorded outcome", value: staffOrderIssueOutcomeLabel(issue))
+                    NavigationLink {
+                        StaffOrderIssueDetailLoaderView(
+                            preferredIssueId: report.backendRowId,
+                            orderId: report.orderId,
+                            staffEntry: nil
+                        )
+                        .environment(session)
+                    } label: {
+                        Label("View issue details", systemImage: "info.circle")
+                    }
+                } else {
+                    Text("Could not load this order issue from the queue. Use Order issues to locate it, or try again.")
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                    NavigationLink {
+                        StaffOrderIssueDetailLoaderView(
+                            preferredIssueId: report.backendRowId,
+                            orderId: report.orderId,
+                            staffEntry: nil
+                        )
+                        .environment(session)
+                    } label: {
+                        Label("Open resolve screen", systemImage: "arrow.uturn.backward.circle")
+                    }
                 }
             }
         } header: {
@@ -349,6 +420,64 @@ struct AdminReportDetailView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
+            }
+        }
+    }
+
+    private func staffOrderIssueIsActionable(_ row: StaffOrderIssueRow) -> Bool {
+        (row.status ?? "").uppercased() == "PENDING"
+    }
+
+    private func staffOrderIssueOutcomeLabel(_ row: StaffOrderIssueRow) -> String {
+        let st = (row.status ?? "").uppercased()
+        switch st {
+        case "WITHDRAWN":
+            return "Buyer withdrew the report (no staff refund action)"
+        case "DECLINED":
+            return "Declined by support"
+        case "RESOLVED":
+            switch (row.resolution ?? "").uppercased() {
+            case "REFUND_WITHOUT_RETURN":
+                return "Refund without return"
+            case "REFUND_WITH_RETURN":
+                let p = (row.returnPostagePaidBy ?? "").uppercased()
+                if p == "SELLER" { return "Refund with return (seller pays return postage)" }
+                if p == "BUYER" { return "Refund with return (buyer pays return postage)" }
+                return "Refund with return"
+            default:
+                return "Resolved"
+            }
+        default:
+            return st.isEmpty ? "Updated" : st.replacingOccurrences(of: "_", with: " ").lowercased().capitalized
+        }
+    }
+
+    private func loadLinkedOrderIssueIfNeeded() async {
+        guard report.reportType == kOrderIssueType else {
+            await MainActor.run {
+                linkedOrderIssue = nil
+                isLoadingLinkedOrderIssue = false
+            }
+            return
+        }
+        await MainActor.run { isLoadingLinkedOrderIssue = true }
+        do {
+            let rows = try await PreluraAdminAPI.allOrderIssues(client: session.graphQL)
+            let byId = rows.first { $0.id == report.backendRowId }
+            let byOrder: StaffOrderIssueRow? = {
+                guard let oid = report.orderId else { return nil }
+                let key = String(oid)
+                return rows.first { $0.order?.id == key }
+            }()
+            let chosen = byId ?? byOrder
+            await MainActor.run {
+                linkedOrderIssue = chosen
+                isLoadingLinkedOrderIssue = false
+            }
+        } catch {
+            await MainActor.run {
+                linkedOrderIssue = nil
+                isLoadingLinkedOrderIssue = false
             }
         }
     }

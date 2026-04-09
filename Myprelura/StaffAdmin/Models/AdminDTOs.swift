@@ -262,6 +262,34 @@ struct StaffOrderIssueRow: Decodable, Identifiable, Hashable {
     let order: LinkedOrder?
     let raisedBy: IssueRaisedBy?
 
+    private enum CodingKeys: String, CodingKey {
+        case id, publicId, issueType, description, status, resolution, returnPostagePaidBy, createdAt, order, raisedBy
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let i = try? c.decode(Int.self, forKey: .id) {
+            id = i
+        } else if let s = try? c.decode(String.self, forKey: .id), let i = Int(s) {
+            id = i
+        } else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .id,
+                in: c,
+                debugDescription: "Expected Int or numeric String for order issue id (GraphQL ID scalar)."
+            )
+        }
+        publicId = try c.decodeIfPresent(String.self, forKey: .publicId)
+        issueType = try c.decodeIfPresent(String.self, forKey: .issueType)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        resolution = try c.decodeIfPresent(String.self, forKey: .resolution)
+        returnPostagePaidBy = try c.decodeIfPresent(String.self, forKey: .returnPostagePaidBy)
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
+        order = try c.decodeIfPresent(LinkedOrder.self, forKey: .order)
+        raisedBy = try c.decodeIfPresent(IssueRaisedBy.self, forKey: .raisedBy)
+    }
+
     struct IssueRaisedBy: Decodable, Hashable {
         let username: String?
     }
