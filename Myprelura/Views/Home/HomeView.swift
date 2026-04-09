@@ -99,7 +99,7 @@ struct HomeView: View {
                     NavigationLink(destination: NotificationsListView()
                         .environmentObject(authService)
                         .environmentObject(bellUnreadStore)) {
-                        NotificationToolbarBellVisual(hasUnread: bellUnreadStore.hasUnread)
+                        NotificationToolbarBellVisual(unreadCount: bellUnreadStore.unreadCount)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(HapticTapButtonStyle())

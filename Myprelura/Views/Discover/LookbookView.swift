@@ -236,6 +236,7 @@ struct LookbookView: View {
                     entries[idx] = updated
                 }
             }
+            .lookbookCommentsPresentationChrome()
         }
         .sheet(isPresented: $showSearchSheet) {
             LookbookSearchSheet(searchText: $searchText, entries: entries)
@@ -398,6 +399,7 @@ private struct LookbookTopicFeedView: View {
                     entries[idx] = updated
                 }
             }
+            .lookbookCommentsPresentationChrome()
         }
         .navigationDestination(item: $selectedProductId) { nav in
             LookbookProductDetailLoader(productId: nav.id, productService: productService, authService: authService)
@@ -1246,6 +1248,17 @@ private struct LookbookProductDetailLoader: View {
     }
 }
 
+// MARK: - Comments sheet presentation (match OptionsSheet / sort–filter modal surface)
+private extension View {
+    func lookbookCommentsPresentationChrome() -> some View {
+        presentationDetents([.fraction(0.44), .medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(22)
+            .presentationBackground(Theme.Colors.modalSheetBackground)
+            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+    }
+}
+
 // MARK: - Comments sheet
 struct LookbookCommentsSheet: View {
     let entry: LookbookEntry
@@ -1256,6 +1269,8 @@ struct LookbookCommentsSheet: View {
     @State private var draft: String = ""
     @State private var loading = false
     @State private var sending = false
+
+    private let sheetBg = Theme.Colors.modalSheetBackground
 
     var body: some View {
         NavigationStack {
@@ -1301,10 +1316,12 @@ struct LookbookCommentsSheet: View {
                 }
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.vertical, Theme.Spacing.sm)
+                .background(sheetBg)
             }
-            .background(Theme.Colors.background)
+            .background(sheetBg)
             .navigationTitle(L10n.string("Comments"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(sheetBg, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.string("Done")) { dismiss() }
@@ -1386,19 +1403,37 @@ private struct LookbookEntryThumbnail: View {
 
 private struct HashtagColoredText: View {
     let text: String
+    @EnvironmentObject private var appRouter: AppRouter
 
     private var attributed: AttributedString {
         var result = AttributedString(text)
-        let pattern = "#\\w+"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return result }
         let ns = text as NSString
-        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
-        for match in matches {
-            if let range = Range(match.range, in: result) {
+        let full = NSRange(location: 0, length: ns.length)
+
+        if let regex = try? NSRegularExpression(pattern: "#\\w+") {
+            for match in regex.matches(in: text, range: full) {
+                guard let range = Range(match.range, in: result) else { continue }
                 result[range].foregroundColor = Theme.primaryColor
                 result[range].font = Theme.Typography.subheadline.weight(.semibold)
             }
         }
+
+        if let regex = try? NSRegularExpression(pattern: "@[A-Za-z0-9_]+") {
+            for match in regex.matches(in: text, range: full) {
+                guard let range = Range(match.range, in: result) else { continue }
+                let token = ns.substring(with: match.range)
+                let username = String(token.dropFirst())
+                if !username.isEmpty {
+                    let enc = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+                    if let url = URL(string: "prelura://user/\(enc)") {
+                        result[range].link = url
+                    }
+                }
+                result[range].foregroundColor = Theme.primaryColor
+                result[range].font = Theme.Typography.subheadline.weight(.semibold)
+            }
+        }
+
         return result
     }
 
@@ -1407,6 +1442,15 @@ private struct HashtagColoredText: View {
             .font(Theme.Typography.subheadline)
             .foregroundColor(Theme.Colors.primaryText)
             .lineLimit(nil)
+            .environment(\.openURL, OpenURLAction { url in
+                if url.scheme?.lowercased() == "prelura",
+                   let host = url.host?.lowercased(),
+                   host == "user" || host == "profile" {
+                    appRouter.handle(url: url)
+                    return .handled
+                }
+                return .systemAction
+            })
     }
 }
 

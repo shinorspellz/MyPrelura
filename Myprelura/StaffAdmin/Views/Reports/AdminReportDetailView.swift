@@ -32,6 +32,12 @@ struct AdminReportDetailView: View {
         return report.reportedByUsername ?? report.accountReportedUsername
     }
 
+    /// Numeric order id for `ORDER_ISSUE` rows — used to load the related listing in support chat via `adminOrder`.
+    private var staffOrderIdForProductBar: String? {
+        guard report.reportType == kOrderIssueType, let oid = report.orderId else { return nil }
+        return String(oid)
+    }
+
     var body: some View {
         List {
             Section("Summary") {
@@ -104,7 +110,7 @@ struct AdminReportDetailView: View {
                         NavigationLink {
                             ConsumerWebPageView(url: url, title: "Listing")
                         } label: {
-                            Text("Open listing on wearhouse.co.uk")
+                            Text("Open listing on mywearhouse.co.uk")
                         }
                     }
                 }
@@ -179,6 +185,8 @@ struct AdminReportDetailView: View {
                 if let sid = report.supportConversationId {
                     NavigationLink {
                         HelpChatView(
+                            orderId: staffOrderIdForProductBar,
+                            staffGraphQLClient: session.graphQL,
                             conversationId: String(sid),
                             isAdminSupportThread: true,
                             customerUsername: supportThreadCustomerUsername
@@ -191,6 +199,8 @@ struct AdminReportDetailView: View {
                 if let ssid = report.sellerSupportConversationId, ssid != report.supportConversationId {
                     NavigationLink {
                         HelpChatView(
+                            orderId: staffOrderIdForProductBar,
+                            staffGraphQLClient: session.graphQL,
                             conversationId: String(ssid),
                             isAdminSupportThread: true,
                             customerUsername: supportThreadCustomerUsername
@@ -217,6 +227,8 @@ struct AdminReportDetailView: View {
                 if let sid = report.supportConversationId, sid != report.conversationId {
                     NavigationLink {
                         HelpChatView(
+                            orderId: staffOrderIdForProductBar,
+                            staffGraphQLClient: session.graphQL,
                             conversationId: String(sid),
                             isAdminSupportThread: true,
                             customerUsername: supportThreadCustomerUsername
@@ -258,6 +270,7 @@ struct AdminReportDetailView: View {
                 if let sid = report.supportConversationId {
                     NavigationLink {
                         HelpChatView(
+                            staffGraphQLClient: session.graphQL,
                             conversationId: String(sid),
                             isAdminSupportThread: true,
                             customerUsername: supportThreadCustomerUsername
@@ -299,6 +312,7 @@ struct AdminReportDetailView: View {
                 if report.reportType == "ACCOUNT", let sid = report.supportConversationId {
                     NavigationLink {
                         HelpChatView(
+                            staffGraphQLClient: session.graphQL,
                             conversationId: String(sid),
                             isAdminSupportThread: true,
                             customerUsername: supportThreadCustomerUsername
@@ -309,48 +323,32 @@ struct AdminReportDetailView: View {
                     }
                 }
             } else if report.reportType == kOrderIssueType {
-                if let cid = report.conversationId {
-                    NavigationLink {
-                        StaffReportConversationLoaderView(conversationId: String(cid))
-                            .environmentObject(authService)
-                    } label: {
-                        Label("View order conversation", systemImage: "bubble.left.and.bubble.right")
-                    }
-                }
-                if let sid = report.supportConversationId {
-                    NavigationLink {
-                        HelpChatView(
-                            conversationId: String(sid),
-                            isAdminSupportThread: true,
-                            customerUsername: supportThreadCustomerUsername
-                        )
-                        .environmentObject(authService)
-                    } label: {
-                        Label("Buyer support chat", systemImage: "lifepreserver")
-                    }
-                }
-                if let ssid = report.sellerSupportConversationId, ssid != report.supportConversationId {
-                    NavigationLink {
-                        HelpChatView(
-                            conversationId: String(ssid),
-                            isAdminSupportThread: true,
-                            customerUsername: supportThreadCustomerUsername
-                        )
-                        .environmentObject(authService)
-                    } label: {
-                        Label("Seller support chat", systemImage: "person.crop.circle.badge.questionmark")
-                    }
+                NavigationLink {
+                    StaffOrderIssueDetailLoaderView(
+                        preferredIssueId: report.backendRowId,
+                        orderId: report.orderId
+                    )
+                    .environment(session)
+                } label: {
+                    Label("Refund, return, or decline issue", systemImage: "arrow.uturn.backward.circle")
                 }
             }
         } header: {
             Text("Actions")
         } footer: {
-            if (report.reportType == "ACCOUNT" || report.reportType == kProfanityType),
-               reportedAccountUserId == nil,
-               report.accountReportedUsername != nil {
-                Text("Could not resolve user id for moderation actions. Check network or permissions.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
+            VStack(alignment: .leading, spacing: 8) {
+                if report.reportType == kOrderIssueType {
+                    Text("Chats stay under Conversation. Buyer and seller can each have their own support thread when both contact help — those are separate rows, not duplicates.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+                if (report.reportType == "ACCOUNT" || report.reportType == kProfanityType),
+                   reportedAccountUserId == nil,
+                   report.accountReportedUsername != nil {
+                    Text("Could not resolve user id for moderation actions. Check network or permissions.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
             }
         }
     }

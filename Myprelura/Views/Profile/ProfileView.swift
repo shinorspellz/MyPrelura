@@ -172,7 +172,6 @@ struct ProfileView: View {
                         listingCount: viewModel.user?.listingsCount ?? 0,
                         isMultiBuyEnabled: viewModel.user?.isMultibuyEnabled ?? isMultiBuyEnabled,
                         isVacationMode: viewModel.user?.isVacationMode ?? isVacationMode,
-                        isStaff: viewModel.user?.isStaff ?? false,
                         username: viewModel.user?.username
                     ))) {
                         Image(systemName: "line.3.horizontal")

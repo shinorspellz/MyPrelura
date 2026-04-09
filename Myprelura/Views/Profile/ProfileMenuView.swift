@@ -113,7 +113,6 @@ struct MenuItemRow: View {
 // MARK: - Submenu: Settings (Flutter SettingScreen). Presented as pushed destination; no own NavigationView.
 struct SettingsMenuView: View {
     @EnvironmentObject var authService: AuthService
-    var isStaff: Bool = false
 
     var body: some View {
         List {
@@ -144,11 +143,6 @@ struct SettingsMenuView: View {
                 }
                 NavigationLink(destination: VerifyIdentityView()) {
                     settingsRow(L10n.string("Identity verification"), icon: "checkmark.shield")
-                }
-                if isStaff {
-                    NavigationLink(destination: AdminMenuView()) {
-                        settingsRow(L10n.string("Admin Actions"), icon: "shield")
-                    }
                 }
             }
             Section(L10n.string("Notifications")) {

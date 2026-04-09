@@ -305,6 +305,35 @@ enum PreluraAdminAPI {
         return (env.adminAllOrders ?? [], env.adminAllOrdersTotalNumber ?? 0)
     }
 
+    /// First line item’s product id for staff chat headers (`adminOrder` is staff-authenticated).
+    struct AdminOrderProductPeekEnvelope: Decodable {
+        let adminOrder: AdminOrderProductPeek?
+    }
+
+    struct AdminOrderProductPeek: Decodable {
+        let lineItems: [AdminOrderProductPeekLine]?
+    }
+
+    struct AdminOrderProductPeekLine: Decodable {
+        let productId: Int?
+    }
+
+    static func adminOrderFirstProductId(client: GraphQLClient, orderId: Int) async throws -> Int? {
+        let q = """
+        query AdminOrderProductPeek($orderId: Int!) {
+          adminOrder(orderId: $orderId) {
+            lineItems { productId }
+          }
+        }
+        """
+        let env: AdminOrderProductPeekEnvelope = try await client.execute(
+            query: q,
+            variables: ["orderId": orderId],
+            responseType: AdminOrderProductPeekEnvelope.self
+        )
+        return env.adminOrder?.lineItems?.first?.productId
+    }
+
     // MARK: - Banners
 
     struct BannersEnvelope: Decodable {
@@ -514,6 +543,84 @@ enum PreluraAdminAPI {
         )
         guard env.setDiscoverFeaturedProducts?.success == true else {
             let msg = env.setDiscoverFeaturedProducts?.message ?? "Failed to update featured products"
+            throw GraphQLError.graphQLErrors([GraphQLErrorResponse(message: msg)])
+        }
+    }
+
+    // MARK: - Order issues (master remote: refund / decline while pending)
+
+    struct AllOrderIssuesEnvelope: Decodable {
+        let allOrderIssues: [StaffOrderIssueRow]?
+    }
+
+    static func allOrderIssues(client: GraphQLClient) async throws -> [StaffOrderIssueRow] {
+        let q = """
+        query AllOrderIssues {
+          allOrderIssues {
+            id
+            publicId
+            issueType
+            description
+            status
+            resolution
+            returnPostagePaidBy
+            createdAt
+            order { id user { username } seller { username } }
+            raisedBy { username }
+          }
+        }
+        """
+        let env: AllOrderIssuesEnvelope = try await client.execute(query: q, responseType: AllOrderIssuesEnvelope.self)
+        return env.allOrderIssues ?? []
+    }
+
+    struct AdminResolveOrderIssueEnvelope: Decodable {
+        let adminResolveOrderIssue: AdminResolveOrderIssuePayload?
+    }
+
+    struct AdminResolveOrderIssuePayload: Decodable {
+        let success: Bool?
+        let message: String?
+    }
+
+    static func adminResolveOrderIssue(
+        client: GraphQLClient,
+        issueId: Int,
+        status: String,
+        resolution: String?,
+        returnPostagePaidBy: String?
+    ) async throws {
+        let q = """
+        mutation AdminResolveOrderIssue(
+          $issueId: Int!
+          $status: String!
+          $resolution: String
+          $returnPostagePaidBy: String
+        ) {
+          adminResolveOrderIssue(
+            issueId: $issueId
+            status: $status
+            resolution: $resolution
+            returnPostagePaidBy: $returnPostagePaidBy
+          ) {
+            success
+            message
+          }
+        }
+        """
+        var vars: [String: Any] = [
+            "issueId": issueId,
+            "status": status,
+        ]
+        vars["resolution"] = resolution.map { $0 as Any } ?? NSNull()
+        vars["returnPostagePaidBy"] = returnPostagePaidBy.map { $0 as Any } ?? NSNull()
+        let env: AdminResolveOrderIssueEnvelope = try await client.execute(
+            query: q,
+            variables: vars,
+            responseType: AdminResolveOrderIssueEnvelope.self
+        )
+        guard env.adminResolveOrderIssue?.success == true else {
+            let msg = env.adminResolveOrderIssue?.message ?? "Could not update issue"
             throw GraphQLError.graphQLErrors([GraphQLErrorResponse(message: msg)])
         }
     }

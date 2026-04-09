@@ -119,6 +119,15 @@ struct ReportsQueueView: View {
         }
         .navigationTitle("Reports")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    StaffOrderIssuesView(wrapsInNavigationStack: false)
+                } label: {
+                    Label("Order issues", systemImage: "cart.fill.badge.minus")
+                }
+            }
+        }
         .adminNavigationChrome()
         .searchable(text: $filterText, prompt: "Filter queue")
         .scrollContentBackground(.hidden)

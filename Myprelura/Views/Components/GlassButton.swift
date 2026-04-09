@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct GlassButton: View {
     let title: String
@@ -96,10 +97,10 @@ struct GlassIconView: View {
     }
 }
 
-/// Glass circle + neutral bell; only a small dot shows state (shopper: red unread; Console: primary when monitor on).
+/// Glass circle + neutral bell; shopper: red **count** badge; Console: primary dot when monitor on.
 struct NotificationToolbarBellVisual: View {
     private enum Kind {
-        case shopperUnread(Bool)
+        case shopper(unreadCount: Int)
         case consoleMonitorOn(Bool)
     }
 
@@ -109,37 +110,65 @@ struct NotificationToolbarBellVisual: View {
         self.kind = .consoleMonitorOn(emphasized)
     }
 
-    init(hasUnread: Bool) {
-        self.kind = .shopperUnread(hasUnread)
+    init(unreadCount: Int) {
+        self.kind = .shopper(unreadCount: max(0, unreadCount))
     }
 
-    private var showDot: Bool {
-        switch kind {
-        case .shopperUnread(let u): return u
-        case .consoleMonitorOn(let on): return on
-        }
-    }
-
-    private var dotColor: Color {
-        switch kind {
-        case .shopperUnread: return Color.red
-        case .consoleMonitorOn: return Theme.primaryColor
-        }
-    }
+    private static let toolbarCanvasWidth: CGFloat = 56
+    private static let toolbarCanvasHeight: CGFloat = 52
+    private static let bellBadgeRimNudgeX: CGFloat = -3
+    private static let bellBadgeRimNudgeY: CGFloat = 3
 
     var body: some View {
-        Image(systemName: "bell")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(Theme.Colors.primaryText)
-            .modifier(GlassIconCircleStyle(size: 44))
-            .overlay(alignment: .topTrailing) {
-                if showDot {
-                    Circle()
-                        .fill(dotColor)
-                        .frame(width: 10, height: 10)
-                        .offset(x: 4, y: -4)
-                        .allowsHitTesting(false)
-                }
+        ZStack {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "bell")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .modifier(GlassIconCircleStyle(size: 44))
+                badgeLayer
+                    .offset(x: Self.bellBadgeRimNudgeX, y: Self.bellBadgeRimNudgeY)
             }
+            .frame(width: 44, height: 44)
+        }
+        .frame(width: Self.toolbarCanvasWidth, height: Self.toolbarCanvasHeight)
+    }
+
+    @ViewBuilder
+    private var badgeLayer: some View {
+        switch kind {
+        case .shopper(let count):
+            if count > 0 {
+                shopperUnreadBadge(count: count)
+            }
+        case .consoleMonitorOn(let on):
+            if on {
+                Circle()
+                    .fill(Theme.primaryColor)
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.35), lineWidth: 0.75)
+                    )
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private static let opaqueBadgeRed = Color(UIColor(red: 0.96, green: 0.26, blue: 0.21, alpha: 1))
+
+    private func shopperUnreadBadge(count: Int) -> some View {
+        let label = count > 99 ? "99+" : "\(count)"
+        return Text(label)
+            .font(.system(size: label.count >= 3 ? 9 : 10, weight: .bold))
+            .foregroundStyle(.white)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, count >= 10 ? 5 : 4)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(Capsule().fill(Self.opaqueBadgeRed))
+            .compositingGroup()
+            .allowsHitTesting(false)
     }
 }

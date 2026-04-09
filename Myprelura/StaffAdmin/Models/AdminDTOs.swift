@@ -249,6 +249,49 @@ private struct AdminDTOsSkippedJSON: Decodable {
     }
 }
 
+/// Row from `allOrderIssues` (staff). Used for support refund / decline on pending disputes.
+struct StaffOrderIssueRow: Decodable, Identifiable, Hashable {
+    let id: Int
+    let publicId: String?
+    let issueType: String?
+    let description: String?
+    let status: String?
+    let resolution: String?
+    let returnPostagePaidBy: String?
+    let createdAt: String?
+    let order: LinkedOrder?
+    let raisedBy: IssueRaisedBy?
+
+    struct IssueRaisedBy: Decodable, Hashable {
+        let username: String?
+    }
+
+    struct LinkedOrder: Decodable, Hashable {
+        let id: String
+        let user: OrderParty?
+        let seller: OrderParty?
+
+        struct OrderParty: Decodable, Hashable {
+            let username: String?
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, user, seller
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            if let i = try? c.decode(Int.self, forKey: .id) {
+                id = String(i)
+            } else {
+                id = try c.decode(String.self, forKey: .id)
+            }
+            user = try c.decodeIfPresent(OrderParty.self, forKey: .user)
+            seller = try c.decodeIfPresent(OrderParty.self, forKey: .seller)
+        }
+    }
+}
+
 struct AdminOrderRow: Decodable, Identifiable, Hashable {
     let id: String
     let priceTotal: GQLDecimal

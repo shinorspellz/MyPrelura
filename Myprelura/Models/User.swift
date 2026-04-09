@@ -16,7 +16,7 @@ struct User: Identifiable, Hashable {
     let listingsCount: Int
     let followingsCount: Int
     let followersCount: Int
-    /// When true, show Admin Actions in Settings. Backend can set via isStaff/isSuperuser.
+    /// Staff flag from the API (profanity / moderation). Admin tools ship only in WEARHOUSE Pro.
     let isStaff: Bool
     /// When true, email has been verified (from viewMe isVerified).
     let isVerified: Bool

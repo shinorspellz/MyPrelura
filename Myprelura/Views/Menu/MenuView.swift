@@ -7,8 +7,6 @@ struct MenuView: View {
     var listingCount: Int = 0
     var isMultiBuyEnabled: Bool = false
     var isVacationMode: Bool = false
-    var isStaff: Bool = false
-    /// When "Admin", show Admin Dashboard in menu.
     var username: String? = nil
 
     @State private var displayedMultiBuy: Bool = false
@@ -42,11 +40,6 @@ struct MenuView: View {
                 menuRow(L10n.string("Debug"), icon: "ladybug")
             }
 #endif
-            if isStaff {
-                NavigationLink(destination: AdminDashboardView()) {
-                    menuRow(L10n.string("Admin Dashboard"), icon: "shield.lefthalf.filled")
-                }
-            }
             NavigationLink(destination: ShopValueView(listingCount: listingCount)) {
                 menuRow(L10n.string("Seller dashboard"), icon: "chart.bar")
             }
@@ -121,7 +114,7 @@ struct MenuView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(destination: SettingsMenuView(isStaff: isStaff)) {
+                NavigationLink(destination: SettingsMenuView()) {
                     Image(systemName: "gearshape")
                         .foregroundColor(Theme.Colors.primaryText)
                 }

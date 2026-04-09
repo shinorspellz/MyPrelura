@@ -5,6 +5,7 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
     case users
     case listings
     case reports
+    case orderIssues
     case messages
     case messaging
     case payments
@@ -22,6 +23,7 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .users: return "User management"
         case .listings: return "Listings"
         case .reports: return "Reports"
+        case .orderIssues: return "Order issues"
         case .messages: return "Messages"
         case .messaging: return "Messaging & offers"
         case .payments: return "Payments & disputes"
@@ -39,6 +41,7 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .users: return "person.3"
         case .listings: return "bag"
         case .reports: return "exclamationmark.triangle"
+        case .orderIssues: return "cart.fill.badge.minus"
         case .messages: return "message"
         case .messaging: return "bubble.left.and.bubble.right"
         case .payments: return "creditcard"
@@ -51,7 +54,7 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
     }
 
     static var liveOps: [AdminSidebarSection] {
-        [.home, .listings, .users, .messages, .reports]
+        [.home, .listings, .users, .messages, .reports, .orderIssues]
     }
 
     static var roadmap: [AdminSidebarSection] {
@@ -78,7 +81,7 @@ struct AdminDesktopShell: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationTitle("Myprelura")
+            .navigationTitle("WEARHOUSE Pro")
             .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
             .scrollContentBackground(.hidden)
             .background(Theme.Colors.navigationBarBackground)
@@ -114,6 +117,8 @@ struct AdminDesktopShell: View {
             ListingsModerationView(wrapsInNavigationStack: false)
         case .reports:
             ReportsQueueView(wrapsInNavigationStack: false)
+        case .orderIssues:
+            StaffOrderIssuesView(wrapsInNavigationStack: false)
         case .messages:
             MessagesRootView(wrapsInNavigationStack: false)
         case .messaging:

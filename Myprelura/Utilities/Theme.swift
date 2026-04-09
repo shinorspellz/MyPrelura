@@ -21,7 +21,7 @@ struct Theme {
 
         /// Dedicated modal sheet surface in dark mode.
         static var modalSheetBackground: Color {
-            effectiveColorScheme == .dark ? Color(hex: "1C1C1C") : Color(uiColor: UIColor.systemBackground)
+            effectiveColorScheme == .dark ? Color(hex: "1C1C1E") : Color(uiColor: UIColor.systemBackground)
         }
 
         static var secondaryBackground: Color {

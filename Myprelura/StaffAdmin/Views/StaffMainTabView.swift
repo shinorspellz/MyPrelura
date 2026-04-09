@@ -27,6 +27,8 @@ struct StaffMainTabView: View {
                 ReportsQueueView(wrapsInNavigationStack: false)
             }
             .tabItem { Label("Reports", systemImage: "exclamationmark.triangle") }
+            // Order issues stay reachable from Reports (toolbar) so the tab bar stays at 5 items — iOS otherwise
+            // collapses extra tabs into the system "More" tab and hides Reports from the main bar.
         }
         .tint(Theme.primaryColor)
         .adminTabBarChrome()

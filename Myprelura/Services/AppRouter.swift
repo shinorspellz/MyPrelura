@@ -38,6 +38,7 @@ final class AppRouter: ObservableObject {
     private static func isPreluraItemUniversalLinkHost(_ host: String) -> Bool {
         switch host.lowercased() {
         case "wearhouse.co.uk", "www.wearhouse.co.uk",
+             "mywearhouse.co.uk", "www.mywearhouse.co.uk",
              "prelura.uk", "www.prelura.uk", "prelura.com", "www.prelura.com":
             return true
         default:
@@ -75,7 +76,7 @@ final class AppRouter: ObservableObject {
         return r
     }
 
-    /// Handle URL (e.g. prelura://product/Ab3xY9k2Mn, https://wearhouse.co.uk/item/Ab3xY9k2Mn, prelura://user/john).
+    /// Handle URL (e.g. prelura://product/Ab3xY9k2Mn, https://mywearhouse.co.uk/item/Ab3xY9k2Mn, prelura://user/john).
     func handle(url: URL) {
         var dest: DeepLinkDestination?
         let scheme = (url.scheme ?? "").lowercased()

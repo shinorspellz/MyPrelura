@@ -978,8 +978,11 @@ class UserService: ObservableObject {
             imagesUrl
             otherIssueDescription
             status
+            resolution
+            returnPostagePaidBy
+            sellerSupportConversationId
             createdAt
-            order { id }
+            order { id seller { username } }
             raisedBy { username }
           }
         }
@@ -998,6 +1001,27 @@ class UserService: ObservableObject {
             responseType: Payload.self
         )
         return response.orderCase
+    }
+
+    /// Buyer who raised the issue withdraws it, accepts the sale, and completes the order when already delivered.
+    func withdrawOrderCase(issueId: Int) async throws -> (success: Bool, message: String?) {
+        let mutation = """
+        mutation WithdrawOrderCase($issueId: Int!) {
+          withdrawOrderCase(issueId: $issueId) {
+            success
+            message
+          }
+        }
+        """
+        struct Row: Decodable { let success: Bool?; let message: String? }
+        struct Payload: Decodable { let withdrawOrderCase: Row? }
+        let response: Payload = try await client.execute(
+            query: mutation,
+            variables: ["issueId": issueId],
+            responseType: Payload.self
+        )
+        let row = response.withdrawOrderCase
+        return (row?.success ?? false, row?.message)
     }
 
     /// Follow a user. Matches Flutter followUser(followedId).
@@ -2336,7 +2360,10 @@ struct SubmittedReportRef {
 struct OrderIssueDetails: Decodable, Identifiable {
     /// GraphQL `OrderType.id` is an integer; keep as string for display consistency with the rest of the app.
     struct OrderRef: Decodable {
+        struct SellerRef: Decodable { let username: String? }
+
         let id: String?
+        let seller: SellerRef?
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2347,9 +2374,10 @@ struct OrderIssueDetails: Decodable, Identifiable {
             } else {
                 id = nil
             }
+            seller = try c.decodeIfPresent(SellerRef.self, forKey: .seller)
         }
 
-        private enum CodingKeys: String, CodingKey { case id }
+        private enum CodingKeys: String, CodingKey { case id, seller }
     }
 
     struct RaisedByRef: Decodable { let username: String? }
@@ -2361,13 +2389,16 @@ struct OrderIssueDetails: Decodable, Identifiable {
     let imagesUrl: [String]
     let otherIssueDescription: String?
     let status: String?
+    let resolution: String?
+    let returnPostagePaidBy: String?
+    let sellerSupportConversationId: Int?
     /// Backend sends ISO8601 strings; `GraphQLClient` does not set `dateDecodingStrategy`, so keep as `String`.
     let createdAt: String?
     let order: OrderRef?
     let raisedBy: RaisedByRef?
 
     private enum CodingKeys: String, CodingKey {
-        case id, publicId, issueType, description, imagesUrl, otherIssueDescription, status, createdAt, order, raisedBy
+        case id, publicId, issueType, description, imagesUrl, otherIssueDescription, status, resolution, returnPostagePaidBy, sellerSupportConversationId, createdAt, order, raisedBy
     }
 
     init(from decoder: Decoder) throws {
@@ -2389,6 +2420,9 @@ struct OrderIssueDetails: Decodable, Identifiable {
         }
         otherIssueDescription = try c.decodeIfPresent(String.self, forKey: .otherIssueDescription)
         status = try c.decodeIfPresent(String.self, forKey: .status)
+        resolution = try c.decodeIfPresent(String.self, forKey: .resolution)
+        returnPostagePaidBy = try c.decodeIfPresent(String.self, forKey: .returnPostagePaidBy)
+        sellerSupportConversationId = try c.decodeIfPresent(Int.self, forKey: .sellerSupportConversationId)
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         order = try c.decodeIfPresent(OrderRef.self, forKey: .order)
         raisedBy = try c.decodeIfPresent(RaisedByRef.self, forKey: .raisedBy)

@@ -79,7 +79,7 @@ struct ConsoleView: View {
                         Toggle("GraphQL API", isOn: $simulateGraphQLDown)
                         Toggle("WebSocket (inbox)", isOn: $simulateWebSocketDown)
                         Toggle("CDN / API host", isOn: $simulateCDNDown)
-                        Toggle("Public web (wearhouse.co.uk)", isOn: $simulatePublicWebDown)
+                        Toggle("Public web (mywearhouse.co.uk)", isOn: $simulatePublicWebDown)
                         Toggle("Analytics field", isOn: $simulateAnalyticsDown)
                         Toggle("Reports field", isOn: $simulateReportsDown)
                         Text("Core + flows")
