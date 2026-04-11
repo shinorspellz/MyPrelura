@@ -109,6 +109,7 @@ struct StaffDashboardView: View {
             case .tools:
                 StaffToolsListView()
                     .environment(session)
+                    .environmentObject(authService)
             case let .report(r):
                 AdminReportDetailView(report: r)
                     .environmentObject(authService)

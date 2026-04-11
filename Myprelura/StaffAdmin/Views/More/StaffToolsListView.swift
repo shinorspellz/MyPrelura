@@ -2,9 +2,16 @@ import SwiftUI
 
 /// Staff utilities list for pushing onto the home `NavigationStack` (full screen on iPad; avoids sheet popovers).
 struct StaffToolsListView: View {
+    @EnvironmentObject private var authService: AuthService
+
     var body: some View {
         List {
             Section("Operations") {
+                NavigationLink {
+                    AdminDashboardView()
+                } label: {
+                    Label(L10n.string("Admin Dashboard"), systemImage: "rectangle.3.group.bubble.left")
+                }
                 NavigationLink {
                     ConsoleView()
                 } label: {

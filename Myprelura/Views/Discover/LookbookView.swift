@@ -1047,37 +1047,58 @@ private struct LookbookShimmerView: View {
 }
 
 private struct LookbookPostCardShimmer: View {
+    private let mediaAspect = LookbookCanonicalAspect.portrait1080x1350.rawValue
+    private let avatarSize: CGFloat = 36
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
                 Circle()
                     .fill(Theme.Colors.secondaryBackground)
-                    .frame(width: 36, height: 36)
+                    .frame(width: avatarSize, height: avatarSize)
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Theme.Colors.secondaryBackground)
                     .frame(width: 100, height: 14)
-                Spacer()
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
+            .padding(.top, Theme.Spacing.sm)
 
-            RoundedRectangle(cornerRadius: 0)
+            RoundedRectangle(cornerRadius: 4)
                 .fill(Theme.Colors.secondaryBackground)
-                .aspectRatio(1, contentMode: .fit)
+                .frame(width: 180, height: 13)
+                .padding(.horizontal, Theme.Spacing.md)
+
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Theme.Colors.secondaryBackground)
+                .frame(height: 14)
+                .padding(.horizontal, Theme.Spacing.md)
+
+            Color.clear
+                .aspectRatio(mediaAspect, contentMode: .fit)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Theme.Colors.secondaryBackground)
+                }
                 .frame(maxWidth: .infinity)
+                .background(Theme.Colors.secondaryBackground.opacity(0.35))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, Theme.Spacing.md)
 
             HStack(spacing: Theme.Spacing.lg) {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Theme.Colors.secondaryBackground)
-                    .frame(width: 80, height: 16)
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Theme.Colors.secondaryBackground)
-                    .frame(width: 70, height: 16)
-                Spacer()
+                    .frame(width: 140, height: 16)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            Divider().background(Theme.Colors.glassBorder.opacity(0.5)).padding(.leading, Theme.Spacing.md)
+            .padding(.top, Theme.Spacing.xs)
+            .padding(.bottom, Theme.Spacing.sm)
+
+            Rectangle()
+                .fill(Theme.Colors.glassBorder.opacity(0.45))
+                .frame(height: 0.5)
+                .padding(.leading, Theme.Spacing.md)
         }
         .padding(.bottom, lookbookSpacing)
     }
