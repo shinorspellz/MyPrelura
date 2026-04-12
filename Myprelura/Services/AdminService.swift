@@ -186,6 +186,31 @@ class AdminService: ObservableObject {
         return (r?.success ?? false, r?.message)
     }
 
+    func adminMarkOrderComplete(orderId: Int) async throws -> (success: Bool, message: String?) {
+        let mutation = """
+        mutation AdminMarkOrderComplete($orderId: Int!) {
+          adminMarkOrderComplete(orderId: $orderId) {
+            success
+            message
+          }
+        }
+        """
+        struct Payload: Decodable {
+            let adminMarkOrderComplete: AdminMutationSimple?
+        }
+        struct AdminMutationSimple: Decodable {
+            let success: Bool?
+            let message: String?
+        }
+        let response: Payload = try await client.execute(
+            query: mutation,
+            variables: ["orderId": orderId],
+            responseType: Payload.self
+        )
+        let r = response.adminMarkOrderComplete
+        return (r?.success ?? false, r?.message)
+    }
+
     /// GraphQL selection for a full admin `Order` (matches `AdminOrderDetailSnapshot`).
     private static let adminOrderDetailSelection = """
     id

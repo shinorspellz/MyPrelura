@@ -100,6 +100,7 @@ struct AdminOrderAdminDetailView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isMarkingDelivered = false
+    @State private var isMarkingComplete = false
     @State private var banner: String?
 
     var body: some View {
@@ -128,12 +129,18 @@ struct AdminOrderAdminDetailView: View {
         .navigationTitle("Order")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let o = order, o.status != "DELIVERED", o.status != "CANCELLED" {
-                ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let o = order, o.status != "DELIVERED", o.status != "COMPLETED", o.status != "CANCELLED" {
                     Button("Mark delivered") {
                         Task { await markDelivered() }
                     }
-                    .disabled(isMarkingDelivered)
+                    .disabled(isMarkingDelivered || isMarkingComplete)
+                }
+                if let o = order, o.status == "DELIVERED" {
+                    Button("Mark complete") {
+                        Task { await markComplete() }
+                    }
+                    .disabled(isMarkingDelivered || isMarkingComplete)
                 }
             }
         }
@@ -176,6 +183,26 @@ struct AdminOrderAdminDetailView: View {
         } catch {
             await MainActor.run {
                 isMarkingDelivered = false
+                banner = error.localizedDescription
+            }
+        }
+    }
+
+    private func markComplete() async {
+        isMarkingComplete = true
+        banner = nil
+        do {
+            let result = try await adminService.adminMarkOrderComplete(orderId: orderId)
+            await MainActor.run {
+                isMarkingComplete = false
+                banner = result.message ?? (result.success ? "Marked complete." : "Failed.")
+            }
+            if result.success {
+                await reload()
+            }
+        } catch {
+            await MainActor.run {
+                isMarkingComplete = false
                 banner = error.localizedDescription
             }
         }
