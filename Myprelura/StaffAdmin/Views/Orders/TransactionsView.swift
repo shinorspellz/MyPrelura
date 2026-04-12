@@ -4,6 +4,7 @@ struct TransactionsView: View {
     var wrapsInNavigationStack: Bool = true
 
     @Environment(AdminSession.self) private var session
+    @StateObject private var adminService = AdminService(client: GraphQLClient())
     @State private var rows: [AdminOrderRow] = []
     @State private var total = 0
     @State private var page = 1
@@ -32,28 +33,35 @@ struct TransactionsView: View {
                 Text(errorMessage).foregroundStyle(Theme.Colors.error)
             }
             ForEach(rows) { o in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Order \(o.id)")
-                            .font(Theme.Typography.headline)
-                        Spacer()
-                        Text(o.priceTotal.display)
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.primaryColor)
-                    }
-                    Text(o.status ?? "—")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                    Text("Buyer: @\(o.user?.username ?? "—")")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                    if let d = o.createdAt {
-                        Text(d)
+                NavigationLink {
+                    AdminOrderAdminDetailView(
+                        orderId: Int(o.id) ?? 0,
+                        adminService: adminService
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Order \(o.id)")
+                                .font(Theme.Typography.headline)
+                            Spacer()
+                            Text(o.priceTotal.display)
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(Theme.primaryColor)
+                        }
+                        Text(o.status ?? "—")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                        Text("Buyer: @\(o.user?.username ?? "—")")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.tertiaryText)
+                        if let d = o.createdAt {
+                            Text(d)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
             }
             if rows.count < total {
                 Button("Load more") {
@@ -67,10 +75,17 @@ struct TransactionsView: View {
         .scrollContentBackground(.hidden)
         .background(Theme.Colors.background)
         .refreshable { await refresh() }
-        .task { await refresh() }
+        .task {
+            adminService.updateAuthToken(session.accessToken)
+            await refresh()
+        }
+        .onChange(of: session.accessToken) { _, newToken in
+            adminService.updateAuthToken(newToken)
+        }
     }
 
     private func refresh() async {
+        adminService.updateAuthToken(session.accessToken)
         page = 1
         isLoading = true
         errorMessage = nil
@@ -86,6 +101,7 @@ struct TransactionsView: View {
     }
 
     private func loadMore() async {
+        adminService.updateAuthToken(session.accessToken)
         isLoading = true
         defer { isLoading = false }
         do {
