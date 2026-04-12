@@ -57,13 +57,19 @@ enum AdminSidebarSection: String, CaseIterable, Identifiable, Hashable {
         [.home, .listings, .users, .messages, .reports, .orderIssues]
     }
 
+    /// Tool-style entries first (quick access on iPad sidebar); planned product modules follow.
     static var roadmap: [AdminSidebarSection] {
-        [.messaging, .payments, .growth, .notifications, .ai, .internalTools, .shadowView]
+        [.internalTools, .shadowView, .messaging, .payments, .growth, .notifications, .ai]
     }
 }
 
+private enum AdminShellSidebarSelection: Hashable {
+    case live(AdminSidebarSection)
+    case tool(AdminToolsMenuItem)
+}
+
 struct AdminDesktopShell: View {
-    @State private var selection: AdminSidebarSection = .home
+    @State private var selection: AdminShellSidebarSelection = .live(.home)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
@@ -71,12 +77,12 @@ struct AdminDesktopShell: View {
             List {
                 Section("Live operations") {
                     ForEach(AdminSidebarSection.liveOps) { item in
-                        sidebarRow(item)
+                        sidebarRowLive(item)
                     }
                 }
-                Section("Roadmap (phase 2+)") {
-                    ForEach(AdminSidebarSection.roadmap) { item in
-                        sidebarRow(item)
+                Section("Tools") {
+                    ForEach(AdminToolsMenuItem.allCases) { item in
+                        sidebarRowTool(item)
                     }
                 }
             }
@@ -95,20 +101,53 @@ struct AdminDesktopShell: View {
         .tint(Theme.primaryColor)
     }
 
-    private func sidebarRow(_ item: AdminSidebarSection) -> some View {
-        Button {
+    private func isSelectedLive(_ item: AdminSidebarSection) -> Bool {
+        if case let .live(s) = selection { return s == item }
+        return false
+    }
+
+    private func isSelectedTool(_ item: AdminToolsMenuItem) -> Bool {
+        if case let .tool(t) = selection { return t == item }
+        return false
+    }
+
+    private func sidebarRowLive(_ item: AdminSidebarSection) -> some View {
+        let isOn = isSelectedLive(item)
+        return Button {
             HapticManager.selection()
-            selection = item
+            selection = .live(item)
         } label: {
             Label(item.title, systemImage: item.systemImage)
-                .foregroundStyle(selection == item ? Theme.primaryColor : Theme.Colors.primaryText)
+                .foregroundStyle(isOn ? Theme.primaryColor : Theme.Colors.primaryText)
         }
-        .listRowBackground(selection == item ? Theme.primaryColor.opacity(0.12) : Color.clear)
+        .listRowBackground(isOn ? Theme.primaryColor.opacity(0.12) : Color.clear)
+    }
+
+    private func sidebarRowTool(_ item: AdminToolsMenuItem) -> some View {
+        let isOn = isSelectedTool(item)
+        return Button {
+            HapticManager.selection()
+            selection = .tool(item)
+        } label: {
+            Label(item.title, systemImage: item.systemImage)
+                .foregroundStyle(isOn ? Theme.primaryColor : Theme.Colors.primaryText)
+        }
+        .listRowBackground(isOn ? Theme.primaryColor.opacity(0.12) : Color.clear)
     }
 
     @ViewBuilder
     private var detailView: some View {
         switch selection {
+        case let .tool(tool):
+            tool.destinationView()
+        case let .live(section):
+            liveSectionDetail(section)
+        }
+    }
+
+    @ViewBuilder
+    private func liveSectionDetail(_ section: AdminSidebarSection) -> some View {
+        switch section {
         case .home:
             StaffDashboardView(wrapsInNavigationStack: false)
         case .users:

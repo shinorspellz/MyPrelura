@@ -44,6 +44,7 @@ struct DebugMenuView: View {
                         Text("WebSocket test")
                     }
                 }
+                #if DEBUG
                 NavigationLink(destination: MessageDeliveryDebugView()) {
                     HStack(spacing: Theme.Spacing.md) {
                         Image(systemName: "paperplane")
@@ -52,6 +53,7 @@ struct DebugMenuView: View {
                         Text("Message delivery test")
                     }
                 }
+                #endif
                 NavigationLink(destination: NotificationTypeMatrixDebugView()) {
                     HStack(spacing: Theme.Spacing.md) {
                         Image(systemName: "list.bullet.rectangle.portrait")

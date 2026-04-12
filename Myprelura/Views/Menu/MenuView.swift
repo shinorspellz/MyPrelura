@@ -35,11 +35,9 @@ struct MenuView: View {
                         .cornerRadius(4)
                 }
             }
-#if DEBUG
             NavigationLink(destination: DebugMenuView()) {
                 menuRow(L10n.string("Debug"), icon: "ladybug")
             }
-#endif
             NavigationLink(destination: ShopValueView(listingCount: listingCount)) {
                 menuRow(L10n.string("Seller dashboard"), icon: "chart.bar")
             }

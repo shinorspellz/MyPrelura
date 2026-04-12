@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// **Roadmap (phase 2+)** destinations (iPad sidebar + Settings on iPhone).
+/// **Roadmap (phase 2+)** destinations (Tools → Roadmap, and Settings on iPhone).
 struct StaffRoadmapView: View {
     var body: some View {
         List {
             Section {
-                Text("Planned modules (no dedicated backend in this pass). Same screens as iPad sidebar under “Roadmap”.")
+                Text("Planned modules (no dedicated backend in this pass). Open from Tools → Roadmap on iPad, or Admin settings on iPhone.")
                     .font(Theme.Typography.footnote)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .listRowBackground(Color.clear)
